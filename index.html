@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AKASHIC RECORDS — Universal Information Archive</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Noto+Serif+KR:wght@400;600;700&family=Courier+Prime:wght@400;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ================================================================
+       노이즈 오버레이 (전체 화면 위에 얹히는 정적 효과)
+  ================================================================ -->
+  <div class="noise-overlay" aria-hidden="true"></div>
+
+  <!-- ================================================================
+       화면 1: 접근 경고 화면
+  ================================================================ -->
+  <div id="screen-warning" class="screen active">
+    <div class="warning-box">
+      <div class="warning-symbol">⚠</div>
+      <h1 class="warning-title">⚠ WARNING ⚠</h1>
+      <h2 class="warning-subtitle">AKASHIC RECORDS</h2>
+      <p class="warning-sub2">UNIVERSAL INFORMATION ARCHIVE</p>
+      <div class="warning-divider"></div>
+      <p class="warning-text">이 공간은 전 우주의 모든 기록이 보존된 금서 보관소입니다</p>
+      <p class="warning-text">허가받지 않은 접근은 인과율의 교란을 야기할 수 있습니다</p>
+      <div class="warning-divider"></div>
+      <p class="warning-level">SECURITY LEVEL: <span class="blink-red">RESTRICTED</span></p>
+      <p class="warning-censored">████████ ███ ████ ██████ ████ ███ █████████</p>
+      <p class="warning-censored">███████████ ██ ███ ████ ██ ████████ ███ ██</p>
+      <div class="warning-divider"></div>
+      <button id="btn-enter" class="btn-primary">[ 인증 후 진입 ]</button>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       화면 2~6: 메인 레이아웃 래퍼
+  ================================================================ -->
+  <div id="screen-main" class="screen">
+
+    <!-- 최상단 분류 바 -->
+    <div class="top-bar">
+      <span class="blink-red classified-text">CLASSIFIED</span>
+      <span class="top-bar-sep">◆</span>
+      <span>CLEARANCE LEVEL: Θ</span>
+      <span class="top-bar-sep">◆</span>
+      <span id="archive-id">ARCHIVE-ID: AR-██████</span>
+    </div>
+
+    <!-- 헤더 -->
+    <header class="site-header">
+      <h1 class="site-title">◈ AKASHIC RECORDS ◈</h1>
+      <p class="site-subtitle">Universal Information Archive</p>
+    </header>
+
+    <!-- Breadcrumb -->
+    <nav class="breadcrumb" id="breadcrumb" aria-label="경로">
+      <span class="bc-item active" data-step="home">LOCATION: HOME</span>
+    </nav>
+
+    <!-- 본문 영역 -->
+    <div class="layout-wrapper">
+
+      <!-- 메인 콘텐츠 영역 -->
+      <main class="main-content" id="main-content">
+
+        <!-- 화면 2: 행성 선택 (1단계) -->
+        <section id="screen-planets" class="content-screen active">
+          <h2 class="section-title">PLANETARY ARCHIVES</h2>
+          <div class="planet-grid" id="planet-grid">
+            <!-- JS로 동적 생성 -->
+          </div>
+        </section>
+
+        <!-- 화면 3: 대분류 선택 (2단계) -->
+        <section id="screen-categories" class="content-screen">
+          <button class="btn-back" id="btn-back-categories">← 뒤로가기</button>
+          <p class="selected-planet-label" id="selected-planet-label"></p>
+          <h2 class="section-title">CLASSIFICATION INDEX</h2>
+          <ul class="category-list" id="category-list">
+            <!-- JS로 동적 생성 -->
+          </ul>
+        </section>
+
+        <!-- 화면 4: 중분류 선택 (3단계) -->
+        <section id="screen-subcategories" class="content-screen">
+          <button class="btn-back" id="btn-back-subcategories">← 뒤로가기</button>
+          <h2 class="section-title">SUB-CLASSIFICATION</h2>
+          <div class="subcat-grid" id="subcat-grid">
+            <!-- JS로 동적 생성 -->
+          </div>
+        </section>
+
+        <!-- 화면 5: 기록 목록 (4단계) -->
+        <section id="screen-records" class="content-screen">
+          <div class="records-toolbar">
+            <button class="btn-back" id="btn-back-records">← 뒤로가기</button>
+            <div class="records-tools">
+              <select id="sort-select" class="sort-select" aria-label="정렬">
+                <option value="date-desc">날짜 최신순</option>
+                <option value="date-asc">날짜 오래된순</option>
+                <option value="title-asc">제목 오름차순</option>
+                <option value="level-desc">보안 등급 높은순</option>
+              </select>
+              <div class="search-box">
+                <input
+                  type="search"
+                  id="search-input"
+                  class="search-input"
+                  placeholder="🔍 제목, 태그, 본문 검색..."
+                  aria-label="기록 검색"
+                />
+              </div>
+            </div>
+          </div>
+          <p class="records-count" id="records-count"></p>
+          <div class="record-list" id="record-list">
+            <!-- JS로 동적 생성 -->
+          </div>
+        </section>
+
+      </main>
+
+      <!-- 사이드바 -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-section">
+          <h3 class="sidebar-title">ARCHIVE STATS</h3>
+          <ul class="stats-list">
+            <li><span class="stat-label">총 기록 수</span><span class="stat-value" id="stat-total">0</span></li>
+            <li><span class="stat-label">총 행성 수</span><span class="stat-value" id="stat-planets">0</span></li>
+            <li><span class="stat-label">내 접근 등급</span><span class="stat-value" id="stat-level">Θ</span></li>
+            <li><span class="stat-label">오늘 업데이트</span><span class="stat-value" id="stat-today">0</span></li>
+          </ul>
+        </div>
+        <div class="sidebar-section">
+          <h3 class="sidebar-title">최근 조회 기록</h3>
+          <ul class="recent-list" id="recent-list">
+            <li class="recent-empty">조회 기록 없음</li>
+          </ul>
+        </div>
+        <!-- 모바일용 햄버거 토글 버튼 -->
+        <button class="sidebar-close" id="sidebar-close" aria-label="사이드바 닫기">✕</button>
+      </aside>
+
+    </div><!-- /.layout-wrapper -->
+
+    <!-- 푸터 -->
+    <footer class="site-footer">
+      <span class="blink-red">⚠ WARNING: Unauthorized access to this archive is a violation of Universal Law Directive 7-Ω. All access attempts are logged and reported to the Akashic Council. ⚠</span>
+    </footer>
+
+    <!-- 모바일: 사이드바 열기 버튼 -->
+    <button class="sidebar-toggle" id="sidebar-toggle" aria-label="사이드바 열기">☰ STATS</button>
+
+  </div><!-- /#screen-main -->
+
+  <!-- ================================================================
+       상세보기 모달
+  ================================================================ -->
+  <div id="modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-label="기록 상세보기">
+    <div class="modal-content">
+      <button class="modal-close" id="modal-close" aria-label="닫기">✕</button>
+      <div class="modal-header">
+        <span class="modal-classified">CLASSIFIED DOCUMENT</span>
+      </div>
+      <div class="modal-body" id="modal-body">
+        <!-- JS로 동적 생성 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 데이터 및 스크립트 로드 -->
+  <script src="data.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
