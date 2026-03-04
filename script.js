@@ -67,8 +67,59 @@ function selectCategory(cat, li) {
   li.classList.add('active');
   currentCategory = cat;
   updateBreadcrumb(cat.name);
+  showToolbar();
   renderRecords(cat.records);
 }
+
+// ── 정렬/필터 툴바 ─────────────────────────────────────────
+const toolbar      = document.getElementById('toolbar');
+const sortSelect   = document.getElementById('sort-select');
+const filterSelect = document.getElementById('filter-select');
+
+function showToolbar() {
+  toolbar.classList.remove('hidden');
+  sortSelect.value   = 'default';
+  filterSelect.value = 'all';
+}
+
+function hideToolbar() {
+  toolbar.classList.add('hidden');
+}
+
+function getFilteredSortedRecords() {
+  if (!currentCategory) return [];
+  let records = currentCategory.records.slice();
+
+  // 필터
+  const filterVal = filterSelect.value;
+  if (filterVal !== 'all') {
+    records = records.filter(r => r.level === filterVal);
+  }
+
+  // 정렬
+  const sortVal = sortSelect.value;
+  if (sortVal === 'title') {
+    records.sort((a, b) => a.title.localeCompare(b.title, 'ko'));
+  } else if (sortVal === 'level') {
+    records.sort((a, b) => {
+      const la = a.level ? parseInt(a.level.replace('LEVEL-', ''), 10) : 0;
+      const lb = b.level ? parseInt(b.level.replace('LEVEL-', ''), 10) : 0;
+      return la - lb;
+    });
+  } else if (sortVal === 'date') {
+    records.sort((a, b) => (a.date || '').localeCompare(b.date || '', 'ko'));
+  }
+
+  return records;
+}
+
+sortSelect.addEventListener('change', () => {
+  if (currentCategory) renderRecords(getFilteredSortedRecords());
+});
+
+filterSelect.addEventListener('change', () => {
+  if (currentCategory) renderRecords(getFilteredSortedRecords());
+});
 
 // ── 브레드크럼 ─────────────────────────────────────────────
 const breadcrumb = document.getElementById('breadcrumb');
@@ -86,6 +137,7 @@ function updateBreadcrumb(categoryName) {
     recordList.innerHTML = '';
     breadcrumb.innerHTML = '';
     breadcrumb.appendChild(homeSpan);
+    hideToolbar();
   });
   breadcrumb.appendChild(homeSpan);
 
@@ -144,6 +196,31 @@ function escapeHTML(str) {
   return _escapeDiv.innerHTML;
 }
 
+// ── 레코드 검색 유틸 ────────────────────────────────────────
+function findRecordById(id) {
+  if (!allData) return null;
+  for (const cat of allData.categories) {
+    for (const rec of cat.records) {
+      if (rec.id === id) return rec;
+    }
+  }
+  return null;
+}
+
+// ── 무작위 기록 ────────────────────────────────────────────
+const randomBtn = document.getElementById('random-btn');
+
+randomBtn.addEventListener('click', () => {
+  if (!allData) return;
+  const allRecords = [];
+  allData.categories.forEach(cat => {
+    cat.records.forEach(rec => allRecords.push(rec));
+  });
+  if (allRecords.length === 0) return;
+  const randomRec = allRecords[Math.floor(Math.random() * allRecords.length)];
+  openModal(randomRec);
+});
+
 // ── 검색 ───────────────────────────────────────────────────
 const searchInput = document.getElementById('search-input');
 
@@ -165,6 +242,7 @@ searchInput.addEventListener('input', () => {
 
   currentCategory = null;
   document.querySelectorAll('#category-list li').forEach(el => el.classList.remove('active'));
+  hideToolbar();
 
   breadcrumb.innerHTML = '';
   const homeSpan = document.createElement('span');
@@ -185,12 +263,13 @@ searchInput.addEventListener('input', () => {
 });
 
 // ── 모달 ───────────────────────────────────────────────────
-const modal      = document.getElementById('modal');
-const modalTitle = document.getElementById('modal-title');
-const modalBody  = document.getElementById('modal-body');
-const modalMeta  = document.getElementById('modal-meta');
-const modalTags  = document.getElementById('modal-tags');
-const modalClose = document.getElementById('modal-close');
+const modal        = document.getElementById('modal');
+const modalTitle   = document.getElementById('modal-title');
+const modalBody    = document.getElementById('modal-body');
+const modalMeta    = document.getElementById('modal-meta');
+const modalTags    = document.getElementById('modal-tags');
+const modalRelated = document.getElementById('modal-related');
+const modalClose   = document.getElementById('modal-close');
 
 function openModal(rec) {
   modalTitle.textContent = rec.title;
@@ -203,6 +282,31 @@ function openModal(rec) {
   }
   if (rec.date) {
     modalMeta.innerHTML += '<div class="meta-item"><span class="meta-label">기록일:</span> ' + escapeHTML(rec.date) + '</div>';
+  }
+
+  // 관련 기록
+  modalRelated.innerHTML = '';
+  if (rec.related && rec.related.length > 0) {
+    const titleDiv = document.createElement('div');
+    titleDiv.className = 'related-title';
+    titleDiv.textContent = '▸ 관련 기록';
+    modalRelated.appendChild(titleDiv);
+
+    const listDiv = document.createElement('div');
+    listDiv.className = 'related-list';
+
+    rec.related.forEach(relId => {
+      const relRec = findRecordById(relId);
+      if (relRec) {
+        const link = document.createElement('span');
+        link.className = 'related-link';
+        link.textContent = relRec.title;
+        link.addEventListener('click', () => openModal(relRec));
+        listDiv.appendChild(link);
+      }
+    });
+
+    modalRelated.appendChild(listDiv);
   }
 
   // 태그
