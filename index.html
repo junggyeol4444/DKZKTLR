@@ -12,22 +12,50 @@
   <div id="warning-screen">
     <div class="warning-box">
       <h1>⚠ 접근 경고 ⚠</h1>
+      <p class="warning-sub">AKASHIC RECORDS — UNIVERSAL INFORMATION ARCHIVE</p>
       <p>이 시스템은 기밀 정보를 포함합니다.</p>
       <p>허가되지 않은 열람은 엄격히 금지됩니다.</p>
-      <button id="enter-btn">동의하고 입장</button>
+      <p class="warning-level">SECURITY LEVEL: <span>RESTRICTED</span></p>
+      <button id="enter-btn">인증 후 진입</button>
     </div>
   </div>
 
   <!-- 메인 화면 -->
   <div id="main" class="hidden">
+    <!-- 최상단 CLASSIFIED 바 -->
+    <div id="top-bar">
+      <span class="classified-text">CLASSIFIED</span>
+      <span class="clearance">◆ CLEARANCE LEVEL: Θ ◆</span>
+      <span class="archive-id">ARCHIVE-<span id="archive-session">0000</span></span>
+    </div>
+
     <header>
-      <h1>아카식 레코드</h1>
-      <input type="text" id="search-input" placeholder="검색..." />
+      <h1>◈ 아카식 레코드 ◈</h1>
+      <input type="text" id="search-input" placeholder="기록 검색..." />
     </header>
+
+    <!-- 브레드크럼 -->
+    <div id="breadcrumb">
+      <span class="crumb" data-level="home">HOME</span>
+    </div>
 
     <div id="content-wrapper">
       <!-- 사이드바 -->
       <nav id="sidebar">
+        <div id="stats-box">
+          <div class="stat-item">
+            <span class="stat-label">총 기록</span>
+            <span class="stat-value" id="stat-total">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">카테고리</span>
+            <span class="stat-value" id="stat-categories">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">접근 등급</span>
+            <span class="stat-value" id="stat-level">Θ</span>
+          </div>
+        </div>
         <ul id="category-list">
           <!-- JS로 채워짐 -->
         </ul>
@@ -39,16 +67,27 @@
         <div id="record-list"></div>
       </main>
     </div>
+
+    <!-- 하단 경고 바 -->
+    <footer id="footer-bar">
+      <span>⚠ WARNING: Unauthorized access to classified records will result in immediate termination of clearance privileges ⚠</span>
+    </footer>
   </div>
 
   <!-- 모달 -->
   <div id="modal" class="hidden">
     <div id="modal-content">
+      <div id="modal-header-bar">CLASSIFIED DOCUMENT</div>
       <button id="modal-close">✕</button>
       <h2 id="modal-title"></h2>
+      <div id="modal-meta"></div>
       <div id="modal-body"></div>
+      <div id="modal-tags"></div>
     </div>
   </div>
+
+  <!-- 노이즈 오버레이 -->
+  <div id="noise-overlay"></div>
 
   <script src="script.js"></script>
 </body>
