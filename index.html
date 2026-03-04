@@ -13,7 +13,7 @@
     <div class="warning-box">
       <h1>⚠ 접근 경고 ⚠</h1>
       <p class="warning-sub">AKASHIC RECORDS — UNIVERSAL INFORMATION ARCHIVE</p>
-      <p>이 시스템은 기밀 정보를 포함합니다.</p>
+      <p class="typing-text">이 시스템은 기밀 정보를 포함합니다.</p>
       <p>허가되지 않은 열람은 엄격히 금지됩니다.</p>
       <p class="warning-level">SECURITY LEVEL: <span>RESTRICTED</span></p>
       <button id="enter-btn">인증 후 진입</button>
@@ -31,7 +31,10 @@
 
     <header>
       <h1>◈ 아카식 레코드 ◈</h1>
-      <input type="text" id="search-input" placeholder="기록 검색..." />
+      <div class="header-controls">
+        <button id="random-btn" title="무작위 기록">🎲</button>
+        <input type="text" id="search-input" placeholder="기록 검색..." />
+      </div>
     </header>
 
     <!-- 브레드크럼 -->
@@ -63,6 +66,28 @@
 
       <!-- 본문 -->
       <main id="record-area">
+        <div id="toolbar" class="hidden">
+          <div class="toolbar-group">
+            <label>정렬:</label>
+            <select id="sort-select">
+              <option value="default">기본</option>
+              <option value="title">제목</option>
+              <option value="level">보안등급</option>
+              <option value="date">날짜</option>
+            </select>
+          </div>
+          <div class="toolbar-group">
+            <label>등급:</label>
+            <select id="filter-level">
+              <option value="all">전체</option>
+              <option value="LEVEL-1">LEVEL-1</option>
+              <option value="LEVEL-2">LEVEL-2</option>
+              <option value="LEVEL-3">LEVEL-3</option>
+              <option value="LEVEL-4">LEVEL-4</option>
+              <option value="LEVEL-5">LEVEL-5</option>
+            </select>
+          </div>
+        </div>
         <p id="placeholder">카테고리를 선택하세요.</p>
         <div id="record-list"></div>
       </main>
@@ -83,6 +108,7 @@
       <div id="modal-meta"></div>
       <div id="modal-body"></div>
       <div id="modal-tags"></div>
+      <div id="modal-related"></div>
     </div>
   </div>
 
