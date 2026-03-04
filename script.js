@@ -61,12 +61,18 @@ function buildSidebar(categories) {
 }
 
 let currentCategory = null;
+const toolbar = document.getElementById('toolbar');
+const sortSelect = document.getElementById('sort-select');
+const filterLevel = document.getElementById('filter-level');
 
 function selectCategory(cat, li) {
   document.querySelectorAll('#category-list li').forEach(el => el.classList.remove('active'));
   li.classList.add('active');
   currentCategory = cat;
   updateBreadcrumb(cat.name);
+  sortSelect.value = 'default';
+  filterLevel.value = 'all';
+  toolbar.classList.remove('hidden');
   renderRecords(cat.records);
 }
 
@@ -215,9 +221,89 @@ function openModal(rec) {
     });
   }
 
+  // 관련 기록
+  const modalRelated = document.getElementById('modal-related');
+  modalRelated.innerHTML = '';
+  if (rec.related && rec.related.length > 0) {
+    const heading = document.createElement('h4');
+    heading.textContent = '관련 기록';
+    modalRelated.appendChild(heading);
+    const list = document.createElement('div');
+    list.className = 'related-list';
+    rec.related.forEach(id => {
+      const found = findRecordById(id);
+      if (found) {
+        const link = document.createElement('span');
+        link.className = 'related-link';
+        link.textContent = found.title;
+        link.addEventListener('click', () => openModal(found));
+        list.appendChild(link);
+      }
+    });
+    modalRelated.appendChild(list);
+  }
+
   modal.classList.remove('hidden');
 }
 
 modalClose.addEventListener('click', () => modal.classList.add('hidden'));
 modal.addEventListener('click', e => { if (e.target === modal) modal.classList.add('hidden'); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') modal.classList.add('hidden'); });
+
+// ── 레코드 검색 함수 ───────────────────────────────────────
+function findRecordById(id) {
+  if (!allData) return null;
+  for (const cat of allData.categories) {
+    for (const rec of cat.records) {
+      if (rec.id === id) return rec;
+    }
+  }
+  return null;
+}
+
+// ── 정렬/필터 ──────────────────────────────────────────────
+function getFilteredSortedRecords(records) {
+  let result = records.slice();
+  const levelFilter = filterLevel.value;
+  if (levelFilter !== 'all') {
+    result = result.filter(r => r.level === levelFilter);
+  }
+  const sortBy = sortSelect.value;
+  if (sortBy === 'title') {
+    result.sort((a, b) => a.title.localeCompare(b.title, 'ko'));
+  } else if (sortBy === 'level') {
+    result.sort((a, b) => {
+      const la = a.level ? parseInt(a.level.replace('LEVEL-', ''), 10) : 0;
+      const lb = b.level ? parseInt(b.level.replace('LEVEL-', ''), 10) : 0;
+      return la - lb;
+    });
+  } else if (sortBy === 'date') {
+    result.sort((a, b) => {
+      const da = a.date || '';
+      const db = b.date || '';
+      return da.localeCompare(db, 'ko');
+    });
+  }
+  return result;
+}
+
+sortSelect.addEventListener('change', () => {
+  if (currentCategory) renderRecords(getFilteredSortedRecords(currentCategory.records));
+});
+
+filterLevel.addEventListener('change', () => {
+  if (currentCategory) renderRecords(getFilteredSortedRecords(currentCategory.records));
+});
+
+// ── 무작위 기록 ────────────────────────────────────────────
+const randomBtn = document.getElementById('random-btn');
+randomBtn.addEventListener('click', () => {
+  if (!allData) return;
+  const allRecords = [];
+  allData.categories.forEach(cat => {
+    cat.records.forEach(rec => allRecords.push(rec));
+  });
+  if (allRecords.length === 0) return;
+  const idx = Math.floor(Math.random() * allRecords.length);
+  openModal(allRecords[idx]);
+});

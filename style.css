@@ -483,3 +483,119 @@ header h1 {
 
 /* ── 유틸 ── */
 .hidden { display: none !important; }
+
+/* ── 타이핑 애니메이션 ── */
+.typing-text {
+  overflow: hidden;
+  white-space: nowrap;
+  border-right: 2px solid #ff4444;
+  display: inline-block;
+  width: 0;
+  animation: typing 2.5s steps(20, end) 0.5s forwards, blink-caret 0.7s step-end infinite;
+}
+
+@keyframes typing {
+  from { width: 0; }
+  to { width: 17em; }
+}
+
+@keyframes blink-caret {
+  0%, 100% { border-color: #ff4444; }
+  50% { border-color: transparent; }
+}
+
+/* ── 무작위 버튼 ── */
+#random-btn {
+  background: #1a1a1a;
+  border: 1px solid #444;
+  color: #d4af37;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0.3rem 0.6rem;
+  transition: background 0.2s, border-color 0.2s;
+  line-height: 1;
+}
+
+#random-btn:hover {
+  background: #2a2a1a;
+  border-color: #d4af37;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* ── 정렬/필터 툴바 ── */
+#toolbar {
+  display: flex;
+  gap: 1.2rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid #222;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+}
+
+.toolbar-group label {
+  color: #666;
+}
+
+.toolbar-group select {
+  background: #1a1a1a;
+  color: #ccc;
+  border: 1px solid #444;
+  padding: 0.25rem 0.5rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.toolbar-group select:focus {
+  outline: none;
+  border-color: #d4af37;
+}
+
+/* ── 관련 기록 ── */
+#modal-related {
+  padding: 0 2rem 1.5rem;
+}
+
+#modal-related h4 {
+  color: #666;
+  font-size: 0.78rem;
+  margin-bottom: 0.5rem;
+  letter-spacing: 0.1em;
+  border-top: 1px solid #2a2a2a;
+  padding-top: 0.8rem;
+}
+
+.related-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.related-link {
+  font-size: 0.75rem;
+  color: #7ec8e3;
+  background: #0e1a20;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid #1a3040;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.related-link:hover {
+  background: #1a2a35;
+  border-color: #7ec8e3;
+  color: #fff;
+}
