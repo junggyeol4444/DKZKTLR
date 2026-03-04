@@ -19,7 +19,7 @@ if (localStorage.getItem('akashic-accepted') === '1') {
   });
 }
 
-// ── 세션 ID 생성 ────────────────────────────────────────────
+// ── 세션 ID 생성 (순수 장식용) ──────────────────────────────
 const archiveSession = document.getElementById('archive-session');
 if (archiveSession) {
   archiveSession.textContent = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
@@ -138,10 +138,10 @@ function renderRecords(records) {
   });
 }
 
+const _escapeDiv = document.createElement('div');
 function escapeHTML(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+  _escapeDiv.textContent = str;
+  return _escapeDiv.innerHTML;
 }
 
 // ── 검색 ───────────────────────────────────────────────────
