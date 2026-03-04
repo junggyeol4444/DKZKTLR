@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>아카식 레코드</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- 경고 화면 -->
+  <div id="warning-screen">
+    <div class="warning-box">
+      <h1>⚠ 접근 경고 ⚠</h1>
+      <p>이 시스템은 기밀 정보를 포함합니다.</p>
+      <p>허가되지 않은 열람은 엄격히 금지됩니다.</p>
+      <button id="enter-btn">동의하고 입장</button>
+    </div>
+  </div>
+
+  <!-- 메인 화면 -->
+  <div id="main" class="hidden">
+    <header>
+      <h1>아카식 레코드</h1>
+      <input type="text" id="search-input" placeholder="검색..." />
+    </header>
+
+    <div id="content-wrapper">
+      <!-- 사이드바 -->
+      <nav id="sidebar">
+        <ul id="category-list">
+          <!-- JS로 채워짐 -->
+        </ul>
+      </nav>
+
+      <!-- 본문 -->
+      <main id="record-area">
+        <p id="placeholder">카테고리를 선택하세요.</p>
+        <div id="record-list"></div>
+      </main>
+    </div>
+  </div>
+
+  <!-- 모달 -->
+  <div id="modal" class="hidden">
+    <div id="modal-content">
+      <button id="modal-close">✕</button>
+      <h2 id="modal-title"></h2>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
