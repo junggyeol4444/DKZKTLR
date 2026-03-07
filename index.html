@@ -30,42 +30,212 @@
     </div>
 
     <header>
-      <h1>◈ 아카식 레코드 ◈</h1>
+      <h1 id="header-title">◈ 아카식 레코드 ◈</h1>
       <input type="text" id="search-input" placeholder="기록 검색..." />
     </header>
 
-    <!-- 브레드크럼 -->
-    <div id="breadcrumb">
-      <span class="crumb" data-level="home">HOME</span>
-    </div>
+    <!-- 네비게이션 -->
+    <nav id="main-nav">
+      <button class="nav-btn active" data-page="dashboard">◈ 대시보드</button>
+      <button class="nav-btn" data-page="database">▤ 데이터베이스</button>
+      <button class="nav-btn" data-page="timeline">◷ 타임라인</button>
+      <button class="nav-btn" data-page="galaxy">✦ 은하 지도</button>
+      <button class="nav-btn" data-page="bookmarks">★ 즐겨찾기</button>
+      <button class="nav-btn" data-page="about">ⓘ 정보</button>
+    </nav>
 
-    <div id="content-wrapper">
-      <!-- 사이드바 -->
-      <nav id="sidebar">
-        <div id="stats-box">
-          <div class="stat-item">
-            <span class="stat-label">총 기록</span>
-            <span class="stat-value" id="stat-total">0</span>
+    <!-- ===== 대시보드 페이지 ===== -->
+    <div id="page-dashboard" class="page-content">
+      <div class="dashboard-grid">
+        <!-- 통계 카드들 -->
+        <div class="dash-stats">
+          <div class="dash-stat-card">
+            <span class="dash-stat-number" id="dash-total">0</span>
+            <span class="dash-stat-label">총 기록</span>
           </div>
-          <div class="stat-item">
-            <span class="stat-label">카테고리</span>
-            <span class="stat-value" id="stat-categories">0</span>
+          <div class="dash-stat-card">
+            <span class="dash-stat-number" id="dash-categories">0</span>
+            <span class="dash-stat-label">카테고리</span>
           </div>
-          <div class="stat-item">
-            <span class="stat-label">접근 등급</span>
-            <span class="stat-value" id="stat-level">Θ</span>
+          <div class="dash-stat-card">
+            <span class="dash-stat-number" id="dash-classified">0</span>
+            <span class="dash-stat-label">기밀 기록</span>
+          </div>
+          <div class="dash-stat-card">
+            <span class="dash-stat-number" id="dash-bookmarks">0</span>
+            <span class="dash-stat-label">즐겨찾기</span>
           </div>
         </div>
-        <ul id="category-list">
-          <!-- JS로 채워짐 -->
-        </ul>
-      </nav>
 
-      <!-- 본문 -->
-      <main id="record-area">
-        <p id="placeholder">카테고리를 선택하세요.</p>
-        <div id="record-list"></div>
-      </main>
+        <!-- 보안등급 분포 -->
+        <div class="dash-section">
+          <h2 class="section-title">▸ 보안등급 분포</h2>
+          <div id="level-chart"></div>
+        </div>
+
+        <!-- 랜덤 기록 발견 -->
+        <div class="dash-section">
+          <h2 class="section-title">▸ 랜덤 기록 탐색</h2>
+          <p class="section-desc">무작위로 기밀 기록을 열람합니다.</p>
+          <button id="random-record-btn" class="action-btn">⟳ 랜덤 기록 열기</button>
+          <div id="random-record-area"></div>
+        </div>
+
+        <!-- 카테고리 요약 -->
+        <div class="dash-section dash-section-wide">
+          <h2 class="section-title">▸ 카테고리 요약</h2>
+          <div id="category-overview" class="category-overview-grid"></div>
+        </div>
+
+        <!-- 최근 등록 기록 -->
+        <div class="dash-section dash-section-wide">
+          <h2 class="section-title">▸ 최고 기밀 기록</h2>
+          <div id="top-secret-list" class="record-grid"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 데이터베이스 페이지 ===== -->
+    <div id="page-database" class="page-content hidden">
+      <!-- 필터 바 -->
+      <div id="filter-bar">
+        <span class="filter-label">보안등급 필터:</span>
+        <button class="filter-btn active" data-level="all">전체</button>
+        <button class="filter-btn" data-level="1">LEVEL-1</button>
+        <button class="filter-btn" data-level="2">LEVEL-2</button>
+        <button class="filter-btn" data-level="3">LEVEL-3</button>
+        <button class="filter-btn" data-level="4">LEVEL-4</button>
+        <button class="filter-btn" data-level="5">LEVEL-5</button>
+      </div>
+      <div id="db-content-wrapper">
+        <!-- 사이드바 -->
+        <nav id="sidebar">
+          <div id="stats-box">
+            <div class="stat-item">
+              <span class="stat-label">총 기록</span>
+              <span class="stat-value" id="stat-total">0</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">카테고리</span>
+              <span class="stat-value" id="stat-categories">0</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">접근 등급</span>
+              <span class="stat-value" id="stat-level">Θ</span>
+            </div>
+          </div>
+          <ul id="category-list"></ul>
+        </nav>
+
+        <!-- 본문 -->
+        <main id="record-area">
+          <p id="placeholder">카테고리를 선택하세요.</p>
+          <div id="record-list" class="record-grid"></div>
+        </main>
+      </div>
+    </div>
+
+    <!-- ===== 타임라인 페이지 ===== -->
+    <div id="page-timeline" class="page-content hidden">
+      <h2 class="page-title">◷ 시간 연대기</h2>
+      <p class="page-desc">아카식 레코드에 기록된 모든 사건과 기록의 시간순 배열</p>
+      <div id="timeline-container"></div>
+    </div>
+
+    <!-- ===== 은하 지도 페이지 ===== -->
+    <div id="page-galaxy" class="page-content hidden">
+      <h2 class="page-title">✦ 은하 지도</h2>
+      <p class="page-desc">알려진 행성, 장소, 세력의 시각적 분포도</p>
+      <div id="galaxy-container">
+        <div id="galaxy-map">
+          <div id="galaxy-center">
+            <span>은하 중심</span>
+          </div>
+          <!-- JS로 행성/장소 노드 생성 -->
+        </div>
+        <div id="galaxy-info">
+          <h3 id="galaxy-info-title">행성 또는 장소를 선택하세요</h3>
+          <div id="galaxy-info-body">
+            <p class="galaxy-placeholder">왼쪽 지도에서 노드를 클릭하면 상세 정보가 표시됩니다.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 즐겨찾기 페이지 ===== -->
+    <div id="page-bookmarks" class="page-content hidden">
+      <h2 class="page-title">★ 즐겨찾기</h2>
+      <p class="page-desc">저장된 기록 목록</p>
+      <div id="bookmarks-empty" class="empty-state">
+        <p>⚠ 저장된 기록이 없습니다.</p>
+        <p class="empty-hint">기록 상세 보기에서 ★ 버튼을 눌러 즐겨찾기에 추가하세요.</p>
+      </div>
+      <div id="bookmarks-list" class="record-grid"></div>
+    </div>
+
+    <!-- ===== 정보 페이지 ===== -->
+    <div id="page-about" class="page-content hidden">
+      <div class="about-container">
+        <div class="about-header">
+          <h2>◈ 아카식 레코드 ◈</h2>
+          <p class="about-subtitle">AKASHIC RECORDS — UNIVERSAL INFORMATION ARCHIVE</p>
+        </div>
+
+        <div class="about-section">
+          <h3>▸ 시스템 개요</h3>
+          <p>아카식 레코드는 은하계 전역의 기밀 정보를 수집, 분류, 보관하는 최상위 보안 아카이브 시스템입니다.
+             행성, 세력, 인물, 유물, 기술, 사건, 이론, 장소 등 8개 카테고리로 분류되며,
+             각 기록은 LEVEL-1(일반)부터 LEVEL-5(최고 기밀)까지의 보안등급이 부여됩니다.</p>
+        </div>
+
+        <div class="about-section">
+          <h3>▸ 보안등급 체계</h3>
+          <div class="about-levels">
+            <div class="about-level-item">
+              <span class="card-level level-1">LEVEL-1</span>
+              <span>공개 정보 — 일반 열람 가능</span>
+            </div>
+            <div class="about-level-item">
+              <span class="card-level level-2">LEVEL-2</span>
+              <span>제한 정보 — 승인된 요원만 열람 가능</span>
+            </div>
+            <div class="about-level-item">
+              <span class="card-level level-3">LEVEL-3</span>
+              <span>기밀 정보 — 부서장급 이상 접근</span>
+            </div>
+            <div class="about-level-item">
+              <span class="card-level level-4">LEVEL-4</span>
+              <span>극비 정보 — 최고위 지휘관급 전용</span>
+            </div>
+            <div class="about-level-item">
+              <span class="card-level level-5">LEVEL-5</span>
+              <span>최고 기밀 — 아카식 관리자 전용, 열람 로그 기록</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="about-section">
+          <h3>▸ 사용 방법</h3>
+          <ul class="about-usage">
+            <li><strong>대시보드:</strong> 전체 기록 통계, 보안등급 분포, 랜덤 기록 탐색</li>
+            <li><strong>데이터베이스:</strong> 카테고리별 기록 열람, 보안등급 필터링, 키워드 검색</li>
+            <li><strong>타임라인:</strong> 모든 기록의 시간순 연대기 열람</li>
+            <li><strong>은하 지도:</strong> 행성 및 장소의 시각적 분포 확인</li>
+            <li><strong>즐겨찾기:</strong> 중요 기록 저장 및 관리</li>
+          </ul>
+        </div>
+
+        <div class="about-section">
+          <h3>▸ 연관 기록 시스템</h3>
+          <p>각 기록의 상세 보기에서 태그 기반 연관 기록이 자동으로 표시됩니다.
+             동일한 태그를 공유하는 기록들이 하단에 나열되어, 정보 간의 연결을 추적할 수 있습니다.</p>
+        </div>
+
+        <div class="about-footer">
+          <p>ARCHIVE SYSTEM v2.0 — CLASSIFIED</p>
+          <p>무단 복제 및 외부 유출 시 즉각적인 인가 말소가 이루어집니다.</p>
+        </div>
+      </div>
     </div>
 
     <!-- 하단 경고 바 -->
@@ -78,11 +248,18 @@
   <div id="modal" class="hidden">
     <div id="modal-content">
       <div id="modal-header-bar">CLASSIFIED DOCUMENT</div>
-      <button id="modal-close">✕</button>
+      <div id="modal-actions">
+        <button id="modal-bookmark" title="즐겨찾기">☆</button>
+        <button id="modal-close" title="닫기">✕</button>
+      </div>
       <h2 id="modal-title"></h2>
       <div id="modal-meta"></div>
       <div id="modal-body"></div>
       <div id="modal-tags"></div>
+      <div id="modal-related">
+        <h3 class="related-title">▸ 연관 기록</h3>
+        <div id="modal-related-list"></div>
+      </div>
     </div>
   </div>
 
