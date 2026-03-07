@@ -665,7 +665,7 @@ function buildRelatedRecords(rec) {
     item.className = 'related-item';
     item.innerHTML =
       '<span class="card-level ' + getLevelClass(r.level) + '">' + escapeHTML(r.level) + '</span> ' +
-      '<span class="related-title">' + escapeHTML(r.title) + '</span>' +
+      '<span class="related-title-text">' + escapeHTML(r.title) + '</span>' +
       '<span class="related-cat">' + escapeHTML(r.categoryName || '') + '</span>';
     item.addEventListener('click', () => openModal(r));
     modalRelatedList.appendChild(item);
