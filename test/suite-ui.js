@@ -187,6 +187,77 @@ check('4.8 60초 이내 연속 작성 차단',
       fast.first === 'ok' && fast.second === 'AKASHIC_TOO_FAST',
       `1번째=${fast.first} 2번째=${fast.second}`);
 
+/* ---------- 4.3 등급 상승 상단 배너 ---------- */
+const viewCodes = sql("select record_code || '|' || planet_id || '|' || category_id || '|' || subcategory_id"
+  + " from public.records where status='published' and deleted_at is null and level<=2 order by id limit 10").split('\n');
+/* 기록 주소로 차례차례 이동해 10건을 열람한다.
+   중간에 ESC 를 쓰면 history.back() 이 직전 기록으로 되돌아가므로 쓰지 않는다. */
+for (const line of viewCodes) {
+  const [c, pl, ca, su] = line.trim().split('|');
+  await page.evaluate(h => { location.hash = h; }, `#/p/${pl}/c/${ca}/s/${su}/r/${c}`);
+  await page.waitForTimeout(700);
+}
+await page.evaluate(() => { location.hash = '#/'; });
+await page.waitForTimeout(1200);
+const bannerShown = await page.isVisible('#level-banner');
+const bannerText  = await page.textContent('#level-banner-text');
+const bannerTop   = await page.evaluate(() => {
+  const b = document.getElementById('level-banner');
+  const m = document.querySelector('.masthead');
+  return b.getBoundingClientRect().top < m.getBoundingClientRect().top;
+});
+check('4.3 등급 상승을 상단 배너로 알림',
+      bannerShown && /CLEARANCE/.test(bannerText) && bannerTop, bannerText);
+await page.click('#level-banner-close'); await page.waitForTimeout(300);
+check('4.3 배너를 닫을 수 있음', !(await page.isVisible('#level-banner')));
+
+/* ---------- 4.4 언어 선택이 계정에도 반영 (5.2) ---------- */
+await setLang(page, 'ja'); await page.waitForTimeout(900);
+const dbLang = sql("select lang from public.profiles p join auth.users u on u.id=p.id where u.email='pg@test.io'");
+await setLang(page, 'ko'); await page.waitForTimeout(900);
+const dbLang2 = sql("select lang from public.profiles p join auth.users u on u.id=p.id where u.email='pg@test.io'");
+check('4.4 언어 전환이 profiles.lang 에 반영', dbLang === 'ja' && dbLang2 === 'ko', `${dbLang} -> ${dbLang2}`);
+
+/* ---------- 4.3 행성 STATUS 를 뜻이 드러나게 표기 ---------- */
+await page.evaluate(() => { location.hash = '#/'; }); await page.waitForTimeout(1300);
+const statusLine = await page.locator('.card[data-planet="EXOPLANET-442"] .card-foot span').first().textContent();
+check('4.3 DORMANT 를 뜻과 함께 표기', /DORMANT/.test(statusLine) && /기록 적음/.test(statusLine), statusLine.trim());
+
+/* ---------- 4.8 관리자: 숨김 기록 대기열 ---------- */
+const nonAdminLink = await page.locator('#sidebar-desktop a[href="#/admin"]').count();
+await page.evaluate(() => { location.hash = '#/admin'; }); await page.waitForTimeout(1200);
+const blocked = await page.textContent('.state-title').catch(() => '');
+check('4.8 관리자가 아니면 대기열 접근 차단', nonAdminLink === 0 && /권한/.test(blocked),
+      `링크=${nonAdminLink} 문구=${blocked}`);
+
+// 신고 3건으로 기록 하나를 숨김 상태로 만든다
+const victim = sql("select id from public.records where record_code='REC-TERRA-001-0005'");
+for (const em of ['a1@test.io', 'a2@test.io', 'a3@test.io']) {
+  sql(`insert into auth.users (instance_id,id,aud,role,email,email_confirmed_at,
+        raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
+       values ('00000000-0000-0000-0000-000000000000', gen_random_uuid(),'authenticated','authenticated',
+               '${em}', now(), '{}', '{}', now(), now())`);
+  sql(`insert into public.reports (record_id,user_id,reason)
+       select ${victim}, p.id, 'no_source' from public.profiles p
+        join auth.users u on u.id = p.id where u.email = '${em}'`);
+}
+check('4.8 신고 3건으로 hidden 전환',
+      sql(`select status from public.records where id=${victim}`) === 'hidden');
+
+// 이 계정을 관리자로 올린 뒤 대기열 확인
+sql("update public.profiles set is_admin = true where id = (select id from auth.users where email='pg@test.io')");
+await page.reload({ waitUntil: 'domcontentloaded' }); await page.waitForTimeout(1800);
+await setLang(page, 'ko');
+const adminLink = await page.locator('#sidebar-desktop a[href="#/admin"]').count();
+await page.evaluate(() => { location.hash = '#/admin'; }); await page.waitForTimeout(1400);
+const queued = await page.locator('[data-unhide]').count();
+check('4.8 관리자에게 대기열 링크와 목록이 보임', adminLink === 1 && queued === 1,
+      `링크=${adminLink} 대기=${queued}`);
+
+await page.click('[data-unhide]'); await page.waitForTimeout(1500);
+const statusNow = sql(`select status from public.records where id=${victim}`);
+check('4.8 관리자가 숨김을 해제할 수 있음', statusNow === 'published', statusNow);
+
 await browser.close();
 process.exit(summary() ? 1 : 0);
 })().catch(e=>{console.error('RUNNER ERROR',e);process.exit(1);});

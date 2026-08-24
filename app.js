@@ -88,6 +88,9 @@ function setLang(lang) {
   document.querySelectorAll('.lang-btn').forEach(b => {
     b.setAttribute('aria-current', b.dataset.lang === lang ? 'true' : 'false');
   });
+  if (state.session && state.session.user) {
+    API.auth.syncLang(state.session.user.id, lang);            // 계정 기본 언어도 갱신
+  }
   render();                                                   // 현재 화면 다시 그리기
 }
 
@@ -138,6 +141,15 @@ function subName(id)    { const x = state.subcategories.find(sc => sc.id === id)
 function blocks(n) { return '█'.repeat(Math.max(8, Math.min(n || 40, 90))); }
 
 function isMotionOff() { return lsGet(LS.motion, '0') === '1'; }
+
+/* 4.3 등급 상승은 상단 배너로 알린다 */
+function levelBanner(msg) {
+  const box = document.getElementById('level-banner');
+  if (!box) return;
+  document.getElementById('level-banner-text').textContent = msg;
+  document.getElementById('level-banner-close').textContent = t('banner.close');
+  box.hidden = false;
+}
 
 function toast(msg, warn) {
   const el = document.getElementById('toast');
@@ -217,7 +229,7 @@ function parseRoute() {
   const simple = {
     login: 'login', signup: 'signup', 'signup-done': 'signup-done',
     reset: 'reset', 'reset-confirm': 'reset-confirm',
-    bookmarks: 'bookmarks', new: 'new', mine: 'mine'
+    bookmarks: 'bookmarks', new: 'new', mine: 'mine', admin: 'admin'
   };
   if (seg.length === 1 && simple[seg[0]]) return { name: simple[seg[0]] };
   if (seg[0] === 'search') return { name: 'search', q: q.get('q') || '' };
@@ -288,6 +300,8 @@ async function renderSidebar() {
       '<a class="btn" href="#/mine">' + esc(t('side.mine')) + '</a>' +
       '<a class="btn" href="#/bookmarks" id="side-book">' + esc(t('side.bookmarks')) + '</a>' +
       '<a class="btn" href="#/search">' + esc(t('side.search')) + '</a>' +
+      (state.profile && state.profile.is_admin
+        ? '<a class="btn btn-red" href="#/admin">' + esc(t('side.admin')) + '</a>' : '') +
     '</div>';
 
   const loading = '<div class="side-row"><span>' + esc(t('gate.checking')) + '</span></div>';
@@ -349,7 +363,7 @@ function renderCrumbs(r) {
   if (r.category) parts.push(crumbLink('#/p/' + r.planet + '/c/' + r.category, catName(r.category)));
   if (r.sub) parts.push(crumbLink(routePath(r), subName(r.sub)));
   const names = { bookmarks: 'book.title', mine: 'mine.title', new: 'form.new',
-                  edit: 'form.edit', search: 'search.title' };
+                  edit: 'form.edit', search: 'search.title', admin: 'admin.title' };
   if (names[r.name]) parts.push('<span>' + esc(t(names[r.name])) + '</span>');
   box.innerHTML = parts.join('<span class="sep">»</span>');
 }
@@ -433,7 +447,8 @@ async function viewPlanets(mount) {
       '<p class="card-code">CLASSIFIED · ' + esc(p.id) + '</p>' +
       '<h3 class="card-title">' + esc(pick(p.name)) + '</h3>' +
       '<p class="card-sub">' + esc(pick(p.location)) + '</p>' +
-      '<p class="card-foot"><span>' + esc(t('planets.status')) + ': ' + esc(p.status) + '</span>' +
+      '<p class="card-foot"><span>' + esc(t('planets.status')) + ': ' + esc(p.status) +
+        ' (' + esc(t('planets.status.' + p.status)) + ')</span>' +
       '<span>' + n + ' ' + esc(t('rec.count')) + '</span></p>' +
       (locked ? '<div class="lock-overlay"><span class="lock-icon">🔒</span><span>' +
         esc(t('planets.locked')) + '</span><span>LEVEL-' + p.required_level + ' REQUIRED</span></div>' : '') +
@@ -686,6 +701,61 @@ async function viewSearch(mount, r) {
 }
 
 /* ============================================================
+ *  12-1. 관리자: 숨김 기록 대기열 (4.8)
+ *     신고 3건이 쌓여 자동으로 숨겨진 기록을 관리자가 검토한다.
+ *     숨김 해제 또는 삭제 확정이 가능하며, 두 동작 모두 RLS 와
+ *     트리거가 관리자 여부를 서버에서 다시 확인한다.
+ * ============================================================ */
+async function viewAdmin(mount) {
+  if (!state.profile || !state.profile.is_admin) {
+    mount.innerHTML = emptyBox('err.forbidden', 'err.forbidden');
+    return;
+  }
+  mount.innerHTML = '<h2 class="section-title">' + esc(t('admin.title')) + '</h2>' + skeleton(2);
+  const rows = await API.records.hidden();
+
+  if (!rows.length) {
+    mount.innerHTML = '<h2 class="section-title">' + esc(t('admin.title')) + '</h2>' +
+                      emptyBox('admin.empty', 'empty.body');
+    return;
+  }
+
+  mount.innerHTML = '<h2 class="section-title">' + esc(t('admin.title')) + '</h2>' +
+    '<div class="grid grid-1">' + rows.map(r =>
+      '<article class="card">' +
+        '<div class="card-head"><span class="card-code">' + esc(r.record_code) + '</span>' +
+          '<span class="badge badge-locked">' + esc(t('admin.reports')) + ' ' + r.report_count +
+          '</span></div>' +
+        '<h3 class="card-title">' + esc(pick(r.title)) + '</h3>' +
+        '<p class="card-summary">' + esc(pick(r.summary)) + '</p>' +
+        '<div class="card-foot"><span>' + esc(fmtDate(r.event_date)) + ' | ' +
+          esc(r.author_code) + ' | ' + esc(t('modal.source')) + ': ' + esc(r.source) + '</span></div>' +
+        '<div class="admin-row">' +
+          '<button type="button" class="btn btn-small" data-unhide="' + r.id + '">' +
+            esc(t('admin.unhide')) + '</button>' +
+          '<button type="button" class="btn btn-small btn-red" data-purge="' + r.id + '">' +
+            esc(t('admin.delete')) + '</button>' +
+        '</div>' +
+      '</article>').join('') + '</div>';
+
+  mount.querySelectorAll('[data-unhide]').forEach(b => b.addEventListener('click', async () => {
+    try {
+      await API.records.setStatus(Number(b.dataset.unhide), 'published');
+      toast(t('admin.unhidden'));
+      render(); renderSidebar();
+    } catch (e) { handleError(e); }
+  }));
+  mount.querySelectorAll('[data-purge]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm(t('form.confirm.delete'))) return;
+    try {
+      await API.records.remove(Number(b.dataset.purge));
+      toast(t('form.deleted'));
+      render(); renderSidebar();
+    } catch (e) { handleError(e); }
+  }));
+}
+
+/* ============================================================
  *  13. 상세 모달 (2.10)
  * ============================================================ */
 const modalEl = () => document.getElementById('modal-record');
@@ -803,7 +873,7 @@ async function openRecordModal(code, r) {
     if (p) {
       state.profile = p;
       renderTopbar();
-      if (p.level > before) toast(t('level.up', { code: greek(p.level) }));
+      if (p.level > before) levelBanner(t('level.up', { code: greek(p.level) }));
     }
     renderSidebar();
   } catch (_) {}
@@ -1071,6 +1141,7 @@ async function render() {
       case 'new':           await viewForm(mount, null); break;
       case 'edit':          await viewForm(mount, r.code); break;
       case 'search':        await viewSearch(mount, r); break;
+      case 'admin':         await viewAdmin(mount); break;
       default:              await viewPlanets(mount);
     }
     closeRecordModal();
@@ -1226,11 +1297,17 @@ function bindGlobal() {
     if (b) setLang(b.dataset.lang);
   });
 
+  /* 등급 상승 배너 닫기 */
+  document.getElementById('level-banner-close').addEventListener('click', () => {
+    document.getElementById('level-banner').hidden = true;
+  });
+
   /* 로그아웃 */
   document.getElementById('btn-logout').addEventListener('click', async () => {
     await API.auth.signOut();
     state.session = null; state.profile = null;
     state.list = { rows: [], offset: 0, done: false, key: '' };
+    document.getElementById('level-banner').hidden = true;
     location.hash = '#/';
     showScreen('screen-gate');
   });

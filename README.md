@@ -66,7 +66,7 @@ SCP 재단 문서 같은 기밀 자료실 분위기의 아카이브입니다.
 - 신고(5종 사유) 및 서로 다른 3명 신고 시 자동 숨김
 - 내가 쓴 기록 목록(공개 / 숨김 / 삭제됨 상태 배지)
 - 전문 검색 (PostgreSQL full-text search)
-- 관리자 권한 (`profiles.is_admin`)
+- 관리자 권한 (`profiles.is_admin`) 과 숨김 기록 검토 대기열 (`#/admin`)
 - 빈 상태 / 네트워크·권한·세션 오류 화면
 - 모션 감소 대응 (`prefers-reduced-motion` + 수동 토글)
 
@@ -163,7 +163,10 @@ update public.profiles set is_admin = true
  where id = (select id from auth.users where email = '<관리자 이메일>');
 ```
 
-관리자는 숨김 처리된 기록의 상태를 되돌리거나 기록을 삭제할 수 있습니다.
+관리자로 로그인하면 사이드바에 **숨김 기록 관리** 버튼이 생깁니다.
+`#/admin` 화면에서 신고가 쌓여 자동으로 숨겨진 기록을 확인하고
+숨김 해제 또는 삭제 확정을 할 수 있습니다. 두 동작 모두 RLS 와 트리거가
+서버에서 관리자 여부를 다시 확인하므로, 화면을 우회해도 통과하지 못합니다.
 
 ---
 
@@ -241,7 +244,7 @@ alter table public.profiles add constraint profiles_lang_check check (lang in ('
 
 ```bash
 cd test && npm install
-./run.sh            # 70개 검사
+./run.sh            # 78개 검사
 ```
 
 자세한 내용과 환경 변수는 `test/README.md` 를 보세요.
@@ -323,15 +326,15 @@ Anglada-Escudé et al., *Nature* 536 (2016); ESO Pale Red Dot
 - Supabase 대시보드에서 정기 백업을 설정하세요.
 - 신고가 누적되어 숨겨진 기록을 주기적으로 검토하세요.
 
+관리자 계정으로 `#/admin` 에 들어가면 화면에서 처리할 수 있습니다.
+SQL 로 직접 보려면:
+
 ```sql
 -- 신고 누적으로 숨겨진 기록
 select r.record_code, r.title ->> 'ko' as title, count(rp.*) as reports
   from public.records r join public.reports rp on rp.record_id = r.id
  where r.status = 'hidden'
  group by r.id order by reports desc;
-
--- 숨김 해제 (관리자 계정으로)
-update public.records set status = 'published' where record_code = 'REC-...';
 ```
 
 - 행성을 열람 제한 구역으로 바꾸려면:

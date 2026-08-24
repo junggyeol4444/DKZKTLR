@@ -138,6 +138,14 @@
     async myProfile() {
       const rows = await run(sb.rpc('get_my_profile'));
       return (rows && rows[0]) || null;
+    },
+
+    /* 화면 언어를 계정에도 남긴다 (5.2 가 lang UPDATE 를 허용).
+       화면 동작은 LocalStorage 로 이미 끝났으므로 실패해도 조용히 넘긴다. */
+    async syncLang(userId, lang) {
+      if (!configured || !sb || !userId) return;
+      await sb.from('profiles').update({ lang }).eq('id', userId).then(
+        () => {}, () => {});
     }
   };
 
@@ -259,6 +267,18 @@
     /* 소프트 삭제 (4.9(1)) */
     async remove(id) {
       return run(sb.rpc('soft_delete_record', { p_record_id: id }));
+    },
+
+    /* 관리자: 신고 누적으로 숨겨진 기록 (4.8) */
+    hidden() {
+      return run(sb.rpc('list_hidden_records'));
+    },
+
+    /* 관리자: 숨김 해제. RLS 와 트리거가 관리자만 통과시킨다. */
+    async setStatus(id, status) {
+      guard();
+      const { error } = await sb.from('records').update({ status }).eq('id', id);
+      if (error) throw normalize(error);
     }
   };
 

@@ -210,6 +210,17 @@ const I18N = {
     'srv.AKASHIC_TAGS_TOO_MANY': '태그는 최대 8개까지 입력할 수 있습니다',
 
     /* 등급 상승 */
+    'planets.status.ACTIVE': '정상',
+    'planets.status.DORMANT': '기록 적음',
+    'planets.status.RESTRICTED': '접근 제한',
+    'side.admin': '숨김 기록 관리',
+    'admin.title': 'MODERATION QUEUE',
+    'admin.empty': '숨김 처리된 기록이 없습니다',
+    'admin.reports': '신고',
+    'admin.unhide': '숨김 해제',
+    'admin.delete': '삭제 확정',
+    'admin.unhidden': '숨김을 해제했습니다',
+    'banner.close': '닫기',
     'date.bc': '기원전 {y}년',
     'level.up': '열람 권한이 상승했습니다 — CLEARANCE {code}',
     'footer.warn': 'WARNING: Unauthorized access is monitored and recorded.'
@@ -400,6 +411,17 @@ const I18N = {
     'srv.AKASHIC_TAGS_REQUIRED': 'Enter at least one tag',
     'srv.AKASHIC_TAGS_TOO_MANY': 'At most eight tags are allowed',
 
+    'planets.status.ACTIVE': 'Active',
+    'planets.status.DORMANT': 'Sparse records',
+    'planets.status.RESTRICTED': 'Restricted',
+    'side.admin': 'MODERATION',
+    'admin.title': 'MODERATION QUEUE',
+    'admin.empty': 'No records are hidden',
+    'admin.reports': 'reports',
+    'admin.unhide': 'Unhide',
+    'admin.delete': 'Delete for good',
+    'admin.unhidden': 'The record is visible again',
+    'banner.close': 'Dismiss',
     'date.bc': '{y} BCE',
     'level.up': 'Clearance raised — CLEARANCE {code}',
     'footer.warn': 'WARNING: Unauthorized access is monitored and recorded.'
@@ -590,6 +612,17 @@ const I18N = {
     'srv.AKASHIC_TAGS_REQUIRED': 'タグを1つ以上入力してください',
     'srv.AKASHIC_TAGS_TOO_MANY': 'タグは最大8個までです',
 
+    'planets.status.ACTIVE': '正常',
+    'planets.status.DORMANT': '記録僅少',
+    'planets.status.RESTRICTED': 'アクセス制限',
+    'side.admin': '非表示記録の管理',
+    'admin.title': 'MODERATION QUEUE',
+    'admin.empty': '非表示の記録はありません',
+    'admin.reports': '通報',
+    'admin.unhide': '非表示を解除',
+    'admin.delete': '削除を確定',
+    'admin.unhidden': '非表示を解除しました',
+    'banner.close': '閉じる',
     'date.bc': '紀元前{y}年',
     'level.up': '閲覧権限が上昇しました — CLEARANCE {code}',
     'footer.warn': 'WARNING: Unauthorized access is monitored and recorded.'

@@ -627,7 +627,31 @@ language sql stable security definer set search_path = public as $$
   offset greatest(coalesce(p_offset, 0), 0);
 $$;
 
--- 8.3 최근 조회 기록 (upsert / 4.11)
+-- 8.3 신고 누적으로 숨겨진 기록 목록 (관리자 전용 / 4.8)
+--     v_records 는 숨김 기록을 내보내지 않으므로 별도 RPC 로 제공한다.
+create or replace function public.list_hidden_records()
+returns table (
+  id bigint, record_code text, planet_id text, category_id text, subcategory_id text,
+  title jsonb, summary jsonb, content jsonb, event_date date, tags text[],
+  source text, level int, author_code text, report_count int,
+  created_at timestamptz, updated_at timestamptz
+)
+language sql stable security definer set search_path = public as $$
+  select r.id, r.record_code, r.planet_id, r.category_id, r.subcategory_id,
+         r.title, r.summary, r.content, r.event_date, r.tags,
+         r.source, r.level,
+         coalesce(p.keeper_code, case when r.is_seed then 'KEEPER-000' else 'KEEPER-???' end),
+         (select count(*)::int from public.reports rp where rp.record_id = r.id),
+         r.created_at, r.updated_at
+    from public.records r
+    left join public.profiles p on p.id = r.author_id
+   where public.is_admin()
+     and r.status = 'hidden'
+     and r.deleted_at is null
+   order by r.created_at desc;
+$$;
+
+-- 8.4 최근 조회 기록 (upsert / 4.11)
 create or replace function public.touch_record_view(p_record_id bigint)
 returns void
 language plpgsql security definer set search_path = public as $$
@@ -638,7 +662,7 @@ begin
   on conflict (user_id, record_id) do update set viewed_at = now();
 end $$;
 
--- 8.4 소프트 삭제 (4.9(1))
+-- 8.5 소프트 삭제 (4.9(1))
 create or replace function public.soft_delete_record(p_record_id bigint)
 returns void
 language plpgsql security definer set search_path = public as $$
@@ -694,6 +718,7 @@ grant execute on function public.get_related_records(bigint, int)     to authent
 grant execute on function public.search_records(text, int, int)       to authenticated;
 grant execute on function public.touch_record_view(bigint)            to authenticated;
 grant execute on function public.soft_delete_record(bigint)           to authenticated;
+grant execute on function public.list_hidden_records()                to authenticated;
 grant execute on function public.current_level()                      to anon, authenticated;
 grant execute on function public.is_admin()                           to anon, authenticated;
 

@@ -531,3 +531,18 @@ body.drawer-open { overflow: hidden; }
 
 /* 검열 배지는 카드 머리 아래 한 줄을 차지한다 */
 .lock-bar { display: block; margin: .5rem 0 0; text-align: center; }
+
+/* 4.3 등급 상승 상단 배너 */
+.level-banner {
+  display: flex; align-items: center; justify-content: center; gap: 1rem;
+  flex-wrap: wrap;
+  padding: .7rem 1rem;
+  background: var(--parchment);
+  border-bottom: 1px solid var(--gold);
+  color: var(--gold);
+  font-family: var(--font-mono); font-size: .84rem; letter-spacing: .08em;
+  text-align: center;
+}
+
+/* 관리자 대기열 */
+.admin-row { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .6rem; }
