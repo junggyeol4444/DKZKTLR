@@ -98,8 +98,12 @@ akashic-records/
 │   ├── schema.sql  테이블 · 인덱스 · 함수 · 트리거 · 집계 뷰 · RPC
 │   ├── rls.sql     RLS 정책
 │   └── seed.sql    행성 5 / 대분류 9 / 중분류 39 / 기록 30건
+├── test/           로컬 검증 하네스 (배포 대상 아님, test/README.md 참조)
 └── README.md
 ```
+
+`test/` 는 사이트 동작에 필요하지 않습니다. 배포 시 함께 올라가도 무해하지만,
+플랫폼에서 제외 설정이 가능하면 빼도 됩니다.
 
 ---
 
@@ -226,6 +230,21 @@ alter table public.profiles add constraint profiles_lang_check check (lang in ('
 5. 기록의 `title` / `summary` / `content` jsonb 에 `"zh"` 키를 넣으면 그대로 표시됩니다.
    전문 검색에도 넣으려면 `schema.sql` 의 `records_tsv()` 함수에 `zh` 항목을 추가하고
    `records` 의 `search_vector` 생성 컬럼을 다시 만드십시오.
+
+---
+
+## 8-1. 로컬 검증
+
+실제 Supabase 프로젝트 없이도 스키마와 화면을 함께 검증할 수 있습니다.
+임시 PostgreSQL 클러스터에 `sql/` 3개를 적재하고, Supabase 호환 셔임을 앞에 세운 뒤
+헤드리스 Chromium 으로 화면을 조작합니다. RLS·트리거·컬럼 권한이 실제와 같은 경로로 적용됩니다.
+
+```bash
+cd test && npm install
+./run.sh            # 70개 검사
+```
+
+자세한 내용과 환경 변수는 `test/README.md` 를 보세요.
 
 ---
 

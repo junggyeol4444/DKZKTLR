@@ -1,0 +1,192 @@
+/* 페이지네이션 · 언어 탭 · 폼 상한 · 신고 UI · 세션 만료 · 드로어 */
+const L = require('./lib');
+const { BASE, sql, newCtx, open, signup, login, confirmEmail: confirm, setLang } = L;
+const { check, summary } = L.reporter();
+
+(async()=>{
+const browser=await L.launch();
+const ctx=await newCtx(browser); const page=await open(ctx);
+await signup(page,'pg@test.io','passphrase5','Pager'); await confirm('pg@test.io');
+await login(page,'pg@test.io','passphrase5');
+await page.click('#app .lang-btn[data-lang="ko"]'); await page.waitForTimeout(500);
+
+/* 페이지네이션을 보려면 한 중분류에 20건을 넘겨야 한다.
+   시드에는 그런 중분류가 없으므로 여기서 25건을 채운다. */
+sql(`insert into public.records
+       (planet_id,category_id,subcategory_id,title,summary,content,
+        event_date,tags,source,level,is_seed,author_id)
+     select 'TERRA-001','ART-007','LITERATURE',
+            jsonb_build_object('ko','대량 기록 '||lpad(g::text,2,'0'),'en','Bulk '||lpad(g::text,2,'0')),
+            jsonb_build_object('ko','요약 '||g), jsonb_build_object('ko','본문 '||g),
+            make_date(1900+g,1,1), array['벌크'],'테스트 출처',1,true,
+            (select id from public.profiles where keeper_code='KEEPER-000')
+       from generate_series(1,25) g
+      where not exists (select 1 from public.records where tags @> array['벌크'])`);
+
+/* ---------- 페이지네이션 (2.9) ---------- */
+await page.evaluate(()=>{location.hash='#/p/TERRA-001/c/ART-007/s/LITERATURE';});
+await page.waitForTimeout(1600);
+const first = await page.locator('.card[data-code]').count();
+const moreShown = await page.isVisible('#btn-more');
+await page.click('#btn-more'); await page.waitForTimeout(1500);
+const second = await page.locator('.card[data-code]').count();
+const moreGone = !(await page.isVisible('#btn-more').catch(()=>false));
+const codes = await page.locator('.card-code').allTextContents();
+const dupes = codes.length - new Set(codes.map(c=>c.trim())).size;
+check('2.9 20건 단위 페이지네이션', first===20 && moreShown && second===25 && moreGone && dupes===0,
+      `1차=${first} 2차=${second} 중복=${dupes} 버튼사라짐=${moreGone}`);
+
+/* 정렬 바꾸면 목록 처음부터 다시 (누적 아님) */
+await page.selectOption('#sort-sel','event_asc'); await page.waitForTimeout(1600);
+const afterSort = await page.locator('.card[data-code]').count();
+const firstTitle = await page.locator('.card-title').first().textContent();
+check('4.7 정렬 변경 시 목록 초기화 + 오래된순 선두', afterSort===20 && /대량 기록 01/.test(firstTitle),
+      `개수=${afterSort} 선두=${firstTitle}`);
+
+/* 더 불러오기 후에도 정렬 유지 */
+await page.click('#btn-more'); await page.waitForTimeout(1500);
+const lastTitle = await page.locator('.card-title').last().textContent();
+check('4.7 추가 로드 후에도 정렬 순서 유지', /대량 기록 25/.test(lastTitle), lastTitle);
+
+/* ---------- 언어 탭 왕복 (2.11) ---------- */
+sql("update public.records set created_at = created_at - interval '10 minutes' where author_id is not null");
+await page.evaluate(()=>{location.hash='#/new';}); await page.waitForTimeout(1300);
+await page.selectOption('#f-planet','TERRA-001');
+await page.selectOption('#f-cat','LANG-008'); await page.waitForTimeout(500);
+await page.selectOption('#f-sub','WRITING');
+await page.fill('#f-title','한국어 제목'); await page.fill('#f-summary','한국어 요약'); await page.fill('#f-content','한국어 본문');
+await page.click('.langtab[data-l="en"]'); await page.waitForTimeout(300);
+const enBlank = await page.inputValue('#f-title');
+await page.fill('#f-title','English title'); await page.fill('#f-summary','English summary'); await page.fill('#f-content','English body');
+await page.click('.langtab[data-l="ja"]'); await page.waitForTimeout(300);
+await page.fill('#f-title','日本語タイトル'); await page.fill('#f-summary','日本語要約'); await page.fill('#f-content','日本語本文');
+await page.click('.langtab[data-l="ko"]'); await page.waitForTimeout(300);
+const koBack = await page.inputValue('#f-title');
+check('2.11 언어 탭 전환 시 입력값 보존', enBlank==='' && koBack==='한국어 제목', `en탭=${JSON.stringify(enBlank)} ko복귀=${koBack}`);
+
+await page.fill('#f-tag','문자'); await page.keyboard.press('Enter');
+await page.fill('#f-source','테스트 출처');
+await page.click('#record-form button[type=submit]'); await page.waitForTimeout(1800);
+const saved = sql("select title->>'en' || '|' || (title->>'ja') || '|' || (content->>'ja') from public.records where title->>'ko'='한국어 제목'");
+check('2.11 세 언어가 모두 저장됨', saved==='English title|日本語タイトル|日本語本文', saved);
+
+/* 저장된 기록이 각 언어로 표시되는가 */
+const code = sql("select record_code from public.records where title->>'ko'='한국어 제목'");
+for (const [lang, expect] of [['en','English title'],['ja','日本語タイトル']]) {
+  await page.click(`#app .lang-btn[data-lang="${lang}"]`); await page.waitForTimeout(500);
+  await page.evaluate(c=>{location.hash='#/p/TERRA-001/c/LANG-008/s/WRITING/r/'+c;}, code);
+  await page.waitForTimeout(1500);
+  const title = await page.textContent('#modal-record-title');
+  check(`4.4 ${lang.toUpperCase()} 화면에서 기록 데이터가 ${lang} 로 표시`, title===expect, title);
+  await page.keyboard.press('Escape'); await page.waitForTimeout(600);
+}
+await page.click('#app .lang-btn[data-lang="ko"]'); await page.waitForTimeout(500);
+
+/* ---------- 태그 8개 상한 ---------- */
+await page.evaluate(()=>{location.hash='#/new';}); await page.waitForTimeout(1300);
+for (let i=1;i<=10;i++){ await page.fill('#f-tag','태그'+i); await page.keyboard.press('Enter'); }
+const chips = await page.locator('.tagchip').count();
+check('2.11 태그 8개 상한', chips===8, 'chips='+chips);
+
+/* ---------- 보안등급 선택지가 본인 등급 이하 ---------- */
+const levelOpts = await page.locator('#f-level option').allTextContents();
+const myLevel = Number(sql("select level from public.profiles p join auth.users u on u.id=p.id where u.email='pg@test.io'"));
+check('2.11 보안등급 선택지는 본인 등급 이하만', levelOpts.length===myLevel,
+      `등급=${myLevel} 선택지=${levelOpts.join(',')}`);
+
+/* ---------- 신고 UI 전체 흐름 (2.14) ---------- */
+const ctx2=await newCtx(browser); const p2=await open(ctx2);
+await signup(p2,'rep@test.io','passphrase6','Rep'); await confirm('rep@test.io');
+await login(p2,'rep@test.io','passphrase6');
+await p2.click('#app .lang-btn[data-lang="ko"]'); await p2.waitForTimeout(500);
+await p2.evaluate(()=>{location.hash='#/p/TERRA-001/c/NAT-001/s/VOLCANO/r/REC-TERRA-001-0003';});
+await p2.waitForTimeout(1600);
+await p2.click('#modal-menu'); await p2.waitForTimeout(400);
+const menuItems = await p2.locator('#modal-menu-list button').allTextContents();
+await p2.locator('#modal-menu-list button[data-act="report"]').click(); await p2.waitForTimeout(600);
+const reportOpen = await p2.isVisible('#modal-report');
+await p2.selectOption('#rp-reason','no_source');
+await p2.fill('#rp-detail','출처가 없습니다');
+await p2.click('#form-report button[type=submit]'); await p2.waitForTimeout(1200);
+const reportClosed = !(await p2.isVisible('#modal-report'));
+const rows = sql("select count(*) from public.reports r join auth.users u on u.id=r.user_id where u.email='rep@test.io'");
+check('2.14 신고 UI 흐름 (⋮ 메뉴 → 사유 선택 → 접수)',
+      menuItems.length===1 && reportOpen && reportClosed && rows==='1',
+      `메뉴=${menuItems.join(',')} rows=${rows}`);
+
+/* 같은 기록 재신고 시 안내 */
+await p2.click('#modal-menu'); await p2.waitForTimeout(300);
+await p2.locator('#modal-menu-list button[data-act="report"]').click(); await p2.waitForTimeout(500);
+await p2.click('#form-report button[type=submit]'); await p2.waitForTimeout(1200);
+const dupMsg = await p2.textContent('#rp-error');
+check('2.14 중복 신고 시 안내 문구', /이미 신고/.test(dupMsg), dupMsg);
+await p2.click('#modal-report .modal-tools [data-close]'); await p2.waitForTimeout(400);
+
+/* 본인 기록에는 수정·삭제 메뉴 */
+await page.evaluate(c=>{location.hash='#/p/TERRA-001/c/LANG-008/s/WRITING/r/'+c;}, code);
+await page.waitForTimeout(1500);
+await page.click('#modal-menu'); await page.waitForTimeout(400);
+const ownMenu = await page.locator('#modal-menu-list button').allTextContents();
+check('2.10 본인 기록은 [수정][삭제], 타인 기록은 [신고]',
+      ownMenu.length===2 && ownMenu.join(',')==='수정,삭제', ownMenu.join(','));
+
+/* ---------- 세션 만료 처리 (2.16) ---------- */
+await p2.keyboard.press('Escape'); await p2.waitForTimeout(500);
+await ctx2.route('**/rest/v1/v_records*', r =>
+  r.fulfill({status:401, contentType:'application/json',
+             body: JSON.stringify({message:'JWT expired', code:'PGRST301'})}));
+await p2.evaluate(()=>{location.hash='#/p/TERRA-001/c/TECH-004/s/INFO';});
+await p2.waitForTimeout(1600);
+const gateShown = await p2.isVisible('#screen-gate');
+const toastTxt = await p2.textContent('#toast').catch(()=> '');
+check('2.16 401/세션 만료 시 경고 화면 복귀 + 안내',
+      gateShown && /세션/.test(toastTxt), `gate=${gateShown} toast=${toastTxt}`);
+
+/* ---------- 모바일 드로어 안 링크 동작 ---------- */
+const ctxM=await newCtx(browser,{viewport:{width:390,height:780}});
+const pm=await open(ctxM); await login(pm,'pg@test.io','passphrase5'); await pm.waitForTimeout(900);
+await pm.click('#btn-drawer'); await pm.waitForTimeout(500);
+await pm.locator('#drawer a[href="#/mine"]').click(); await pm.waitForTimeout(1400);
+const drawerClosed = !(await pm.isVisible('#drawer'));
+const onMine = await pm.evaluate(()=>location.hash);
+check('2.17 드로어 안 링크 클릭 시 이동 + 패널 닫힘',
+      drawerClosed && onMine==='#/mine', `hash=${onMine} closed=${drawerClosed}`);
+
+/* ---------- 회귀: 공유 링크로 직접 연 탭에서 모달 닫기 ----------
+   history.back() 만 쓰면 뒤로 갈 항목이 없어 사이트 밖으로 나가 버렸다. */
+const pDirect = await ctx.newPage();
+await pDirect.goto(BASE + '/#/p/TERRA-001/c/TECH-004/s/ENERGY/r/REC-TERRA-001-0008',
+                   { waitUntil: 'domcontentloaded' });
+await pDirect.waitForTimeout(2000);
+const directOpen = await pDirect.isVisible('#modal-record');
+await pDirect.keyboard.press('Escape');
+await pDirect.waitForTimeout(1200);
+const afterUrl = await pDirect.evaluate(() => location.href);
+check('4.2 공유 링크로 직접 연 기록에서 ESC 시 사이트 안에 남는다',
+      directOpen && afterUrl.endsWith('#/p/TERRA-001/c/TECH-004/s/ENERGY'), afterUrl);
+
+/* ---------- 회귀: 60초 연속 작성 제한 (4.8) ----------
+   앞선 작성이 아직 60초 안이면 1번째부터 막혀 검사가 무뎌지므로
+   직전 작성 시각을 앞당겨 두고 시작한다. */
+sql("update public.records set created_at = created_at - interval '10 minutes'"
+    + " where author_id is not null");
+const fast = await page.evaluate(async () => {
+  const mk = n => ({
+    planet_id: 'TERRA-001', category_id: 'LANG-008', subcategory_id: 'WRITING',
+    title: { ko: '연속 ' + n }, summary: { ko: '요약' }, content: { ko: '본문' },
+    event_date: null, tags: ['t'], source: '출처', level: 1
+  });
+  const out = {};
+  try { await window.AKASHIC_API.records.create(mk(1)); out.first = 'ok'; }
+  catch (e) { out.first = e.code; }
+  try { await window.AKASHIC_API.records.create(mk(2)); out.second = 'no-error'; }
+  catch (e) { out.second = e.code; }
+  return out;
+});
+check('4.8 60초 이내 연속 작성 차단',
+      fast.first === 'ok' && fast.second === 'AKASHIC_TOO_FAST',
+      `1번째=${fast.first} 2번째=${fast.second}`);
+
+await browser.close();
+process.exit(summary() ? 1 : 0);
+})().catch(e=>{console.error('RUNNER ERROR',e);process.exit(1);});

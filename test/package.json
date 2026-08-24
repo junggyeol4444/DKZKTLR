@@ -1,0 +1,12 @@
+{
+  "name": "akashic-records-test",
+  "private": true,
+  "description": "로컬 검증용 Supabase 호환 셔임과 시나리오 스위트 (배포 대상 아님)",
+  "scripts": {
+    "test": "./run.sh"
+  },
+  "dependencies": {
+    "pg": "^8.11.0",
+    "@supabase/supabase-js": "^2.39.0"
+  }
+}
