@@ -809,6 +809,19 @@ async function openRecordModal(code, r) {
   } catch (_) {}
 }
 
+/* 모달에서 나가기.
+   앱 안에서 카드를 눌러 들어온 경우에만 history.back() 을 쓴다.
+   공유 링크로 곧바로 들어온 탭에서는 뒤로 갈 항목이 없어
+   사이트 밖으로 나가 버리므로, 그때는 목록 주소로 직접 이동한다. */
+function leaveModal() {
+  if (state.route && state.route.name === 'record') {
+    if (state.modal.pushed) { history.back(); return; }
+    location.hash = routePath(state.route);
+    return;
+  }
+  closeRecordModal();
+}
+
 function closeRecordModal() {
   const box = modalEl();
   if (box.hidden) return;
@@ -1075,6 +1088,9 @@ async function onRouteChange() {
   const prev = state.route;
   state.route = r;
 
+  // 앱 안에서 이동해 들어온 기록 화면인지 기억한다 (leaveModal 이 사용)
+  if (r.name === 'record') state.modal.pushed = !!prev;
+
   // 비로그인 상태로 내부 화면 접근 시 경고 화면으로 (실제 차단은 RLS)
   if (!state.session && !PUBLIC_ROUTES.includes(r.name)) {
     showScreen('screen-gate');
@@ -1244,8 +1260,7 @@ function bindGlobal() {
   document.querySelectorAll('[data-close]').forEach(el => {
     el.addEventListener('click', () => {
       if (el.closest('#modal-report')) { closeReportModal(); return; }
-      if (state.route && state.route.name === 'record') history.back();
-      else closeRecordModal();
+      leaveModal();
     });
   });
 
@@ -1253,11 +1268,7 @@ function bindGlobal() {
   document.addEventListener('keydown', ev => {
     if (ev.key !== 'Escape') return;
     if (!document.getElementById('modal-report').hidden) { closeReportModal(); return; }
-    if (!modalEl().hidden) {
-      if (state.route && state.route.name === 'record') history.back();
-      else closeRecordModal();
-      return;
-    }
+    if (!modalEl().hidden) { leaveModal(); return; }
     if (!drawer.hidden) closeDrawer();
   });
 
@@ -1325,7 +1336,9 @@ async function boot() {
   } catch (_) { state.session = null; }
 
   state.booting = false;
-  state.route = parseRoute() || { name: 'planets' };
+  // state.route 는 onRouteChange 가 정한다.
+  // 여기서 미리 채우면 첫 라우팅에서 prev 가 채워져,
+  // 공유 링크로 곧바로 연 기록 화면을 "앱 안에서 이동해 들어온 것"으로 잘못 판단한다.
   if (state.session) renderSidebar();
   await onRouteChange();
 }
