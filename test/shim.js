@@ -140,10 +140,17 @@ http.createServer(async (req, res) => {
     if (p === '/auth/v1/token' && req.method === 'POST') {
       const b = await readBody(req);
       if (u.searchParams.get('grant_type') === 'refresh_token') {
-        const r = await pool.query('select id, email from auth.users limit 1');
-        const user = r.rows[0];
+        // refresh_token 에 사용자 id 를 담아 두고 그 사용자로만 재발급한다.
+        // 아무 사용자나 돌려주면 갱신 경로를 검사하는 의미가 없어진다.
+        const id = String(b && b.refresh_token || '').replace(/^rt:/, '');
+        const r = await pool.query('select id, email from auth.users where id = $1', [id]);
+        if (!r.rows.length) {
+          return send(res, 400, { error: 'invalid_grant', message: 'Invalid Refresh Token' });
+        }
+        const user = { id: r.rows[0].id, email: r.rows[0].email,
+                       aud: 'authenticated', role: 'authenticated' };
         return send(res, 200, { access_token: mkJwt(user), token_type: 'bearer', expires_in: 3600,
-                                refresh_token: 'rt', user });
+                                refresh_token: 'rt:' + user.id, user });
       }
       const r = await pool.query(
         `select id, email, email_confirmed_at,
@@ -159,7 +166,7 @@ http.createServer(async (req, res) => {
       }
       const user = { id: r.rows[0].id, email: r.rows[0].email, aud: 'authenticated', role: 'authenticated' };
       return send(res, 200, { access_token: mkJwt(user), token_type: 'bearer', expires_in: 3600,
-                              refresh_token: 'rt', user });
+                              refresh_token: 'rt:' + user.id, user });
     }
 
     if (p === '/auth/v1/user') {
