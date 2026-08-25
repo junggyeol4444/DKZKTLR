@@ -28,7 +28,7 @@ const state = {
   subcategories: [],
   route: null,
   list: { rows: [], offset: 0, done: false, key: '' },
-  modal: { record: null, pushed: false, lastFocus: null },
+  modal: { record: null, pushed: false, lastFocus: null, fromCode: null },
   reportTarget: null,
   booting: true
 };
@@ -763,6 +763,7 @@ const modalEl = () => document.getElementById('modal-record');
 async function openRecordModal(code, r) {
   const box = modalEl();
   state.modal.lastFocus = document.activeElement;
+  state.modal.fromCode = code;      // 목록이 다시 그려져도 카드를 찾아갈 수 있도록
 
   let row;
   try { row = await API.records.byCode(code); }
@@ -899,8 +900,17 @@ function closeRecordModal() {
   document.getElementById('modal-menu-list').hidden = true;
   document.body.classList.remove('drawer-open');
   state.modal.record = null;
-  const back = state.modal.lastFocus;
-  if (back && document.contains(back)) back.focus();
+
+  // 원래 눌렀던 카드로 포커스를 되돌린다.
+  // 목록이 다시 그려져 원래 노드가 사라졌으면 같은 기록 코드의 카드를 찾고,
+  // 그것도 없으면 본문 영역으로 보낸다.
+  let back = state.modal.lastFocus;
+  if (!back || !document.contains(back) || !back.classList.contains('card')) {
+    back = state.modal.fromCode
+      ? document.querySelector('.card[data-code="' + CSS.escape(state.modal.fromCode) + '"]')
+      : null;
+  }
+  (back && document.contains(back) ? back : document.getElementById('main')).focus();
 }
 
 /* 신고 모달 (2.14) */
@@ -1172,10 +1182,20 @@ async function onRouteChange() {
     return;
   }
 
+  const samePath = prev && prev.planet === r.planet &&
+                   prev.category === r.category && prev.sub === r.sub;
+
   // 모달만 닫히는 이동이면 목록을 다시 그리지 않는다
-  if (prev && prev.name === 'record' && r.name === 'records' &&
-      prev.planet === r.planet && prev.category === r.category && prev.sub === r.sub) {
+  if (prev && prev.name === 'record' && r.name === 'records' && samePath) {
     closeRecordModal();
+    return;
+  }
+
+  // 이미 그려진 목록 위에서 모달만 여는 이동도 마찬가지.
+  // 목록을 다시 그리면 방금 누른 카드가 사라져 포커스를 되돌릴 곳이 없어진다.
+  if (prev && prev.name === 'records' && r.name === 'record' && samePath) {
+    renderCrumbs(r);
+    await openRecordModal(r.code, r);
     return;
   }
   await render();

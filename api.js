@@ -24,12 +24,15 @@
     }
   }
 
-  function normalize(error) {
+  /* supabase-js 는 HTTP 상태를 오류 객체가 아니라 응답에 담는다.
+     상태를 함께 넘겨받아야 403 / 404 / 5xx 를 구분할 수 있다. */
+  function normalize(error, httpStatus) {
     if (!error) return null;
     if (error instanceof ApiError) return error;
 
     const msg = String(error.message || error || '');
-    const status = error.status || (error.originalError && error.originalError.status) || 0;
+    const status = httpStatus || error.status ||
+                   (error.originalError && error.originalError.status) || 0;
     const pgCode = error.code || '';
 
     // DB 트리거가 올린 업무 규칙 오류
@@ -62,7 +65,7 @@
     } catch (e) {
       throw normalize(e);
     }
-    if (res.error) throw normalize(res.error);
+    if (res.error) throw normalize(res.error, res.status);
     return res.data;
   }
 
@@ -254,14 +257,14 @@
     /* 등록: record_code / author_id / created_at 은 서버가 정합니다 (2.11) */
     async create(payload) {
       guard();
-      const { error } = await sb.from('records').insert(payload);
-      if (error) throw normalize(error);
+      const { error, status } = await sb.from('records').insert(payload);
+      if (error) throw normalize(error, status);
     },
 
     async update(id, payload) {
       guard();
-      const { error } = await sb.from('records').update(payload).eq('id', id);
-      if (error) throw normalize(error);
+      const { error, status } = await sb.from('records').update(payload).eq('id', id);
+      if (error) throw normalize(error, status);
     },
 
     /* 소프트 삭제 (4.9(1)) */
@@ -277,8 +280,8 @@
     /* 관리자: 숨김 해제. RLS 와 트리거가 관리자만 통과시킨다. */
     async setStatus(id, status) {
       guard();
-      const { error } = await sb.from('records').update({ status }).eq('id', id);
-      if (error) throw normalize(error);
+      const res = await sb.from('records').update({ status }).eq('id', id);
+      if (res.error) throw normalize(res.error, res.status);
     }
   };
 
@@ -291,15 +294,15 @@
     },
     async add(recordId, userId) {
       guard();
-      const { error } = await sb.from('bookmarks')
+      const { error, status } = await sb.from('bookmarks')
         .insert({ user_id: userId, record_id: recordId });
-      if (error && error.code !== '23505') throw normalize(error);
+      if (error && error.code !== '23505') throw normalize(error, status);
     },
     async remove(recordId, userId) {
       guard();
-      const { error } = await sb.from('bookmarks').delete()
+      const { error, status } = await sb.from('bookmarks').delete()
         .eq('user_id', userId).eq('record_id', recordId);
-      if (error) throw normalize(error);
+      if (error) throw normalize(error, status);
     }
   };
 
@@ -316,10 +319,10 @@
   const reports = {
     async add(recordId, userId, reason, detail) {
       guard();
-      const { error } = await sb.from('reports').insert({
+      const { error, status } = await sb.from('reports').insert({
         record_id: recordId, user_id: userId, reason, detail: detail || null
       });
-      if (error) throw normalize(error);
+      if (error) throw normalize(error, status);
     }
   };
 
