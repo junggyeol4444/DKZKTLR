@@ -190,7 +190,7 @@ async function handleError(e, mount) {
   const msg = errText(e);
   if (mount) {
     mount.innerHTML =
-      '<div class="state-box"><p class="state-mark">▓▓▓▓▓▓▓▓</p>' +
+      '<div class="state-box"><p class="state-mark" aria-hidden="true">▓▓▓▓▓▓▓▓</p>' +
       '<p class="state-title">' + esc(msg) + '</p>' +
       '<button type="button" class="btn" id="btn-retry">' + esc(t('err.retry')) + '</button></div>';
     const b = mount.querySelector('#btn-retry');
@@ -210,7 +210,7 @@ function skeleton(n) {
 }
 
 function emptyBox(titleKey, bodyKey) {
-  return '<div class="state-box"><p class="state-mark">▓▓▓▓▓▓▓▓</p>' +
+  return '<div class="state-box"><p class="state-mark" aria-hidden="true">▓▓▓▓▓▓▓▓</p>' +
          '<p class="state-title">' + esc(t(titleKey || 'empty.title')) + '</p>' +
          '<p class="state-body">' + esc(t(bodyKey || 'empty.body')) + '</p></div>';
 }
@@ -365,7 +365,8 @@ function renderCrumbs(r) {
   const names = { bookmarks: 'book.title', mine: 'mine.title', new: 'form.new',
                   edit: 'form.edit', search: 'search.title', admin: 'admin.title' };
   if (names[r.name]) parts.push('<span>' + esc(t(names[r.name])) + '</span>');
-  box.innerHTML = parts.join('<span class="sep">»</span>');
+  // 구분자는 장식이므로 보조기술에서 감춘다 (명암비 기준의 장식 예외에 해당)
+  box.innerHTML = parts.join('<span class="sep" aria-hidden="true">»</span>');
 }
 
 /* ============================================================

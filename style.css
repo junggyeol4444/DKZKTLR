@@ -267,7 +267,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold); }
   color: var(--text-2);
   overflow-x: auto;
 }
-.crumb-label { color: var(--faint); }
+/* 읽어야 하는 라벨이므로 --faint(2.6:1) 가 아니라 --text-2(약 4.9:1) 를 쓴다 (3.1) */
+.crumb-label { color: var(--text-2); }
 #crumbs a { color: var(--text-2); }
 #crumbs a:hover { color: var(--gold); }
 #crumbs .sep { color: var(--faint); margin: 0 .35rem; }
