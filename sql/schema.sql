@@ -198,6 +198,7 @@ $$;
 -- 4.1 가입 시 profiles 생성 + 이메일 인증 완료 시 keeper_code 발급
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
+declare v_no bigint;
 begin
   insert into public.profiles (id, display_name, lang)
   values (
@@ -208,8 +209,11 @@ begin
   on conflict (id) do nothing;
 
   if new.email_confirmed_at is not null then
+    -- record_code 와 같은 이유로 999 번을 넘어가면 자리수를 늘린다
+    select nextval('public.keeper_code_seq') into v_no;
     update public.profiles
-       set keeper_code = 'KEEPER-' || lpad(nextval('public.keeper_code_seq')::text, 3, '0')
+       set keeper_code = 'KEEPER-' ||
+             case when v_no < 1000 then lpad(v_no::text, 3, '0') else v_no::text end
      where id = new.id and keeper_code is null;
   end if;
 
@@ -365,7 +369,11 @@ begin
        do update set last_no = public.record_counters.last_no + 1
     returning last_no into v_no;
 
-  new.record_code := 'REC-' || new.planet_id || '-' || lpad(v_no::text, 4, '0');
+  -- 5.4 는 4자리 일련번호를 규정한다. 다만 lpad 는 인자가 더 길면 잘라내므로
+  -- 10000 번째 기록이 1000 번과 같은 코드가 되어 충돌한다.
+  -- 9999 까지는 규정대로 0 을 채우고, 그 뒤로는 자리수를 늘려 유일성을 지킨다.
+  new.record_code := 'REC-' || new.planet_id || '-' ||
+    case when v_no < 10000 then lpad(v_no::text, 4, '0') else v_no::text end;
   return new;
 end $$;
 
