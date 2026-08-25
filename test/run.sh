@@ -62,7 +62,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-SUITES=("core" "lifecycle" "ui" "related" "edge" "scale" "style" "hardening" "session")
+SUITES=("core" "lifecycle" "ui" "related" "edge" "scale" "style" "hardening" "session" "race")
 [ $# -gt 0 ] && SUITES=("$@")
 
 FAILED=0

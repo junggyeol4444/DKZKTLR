@@ -30,7 +30,8 @@ const state = {
   list: { rows: [], offset: 0, done: false, key: '' },
   modal: { record: null, pushed: false, lastFocus: null, fromCode: null },
   reportTarget: null,
-  booting: true
+  booting: true,
+  renderSeq: 0
 };
 
 function lsGet(k, d) { try { return localStorage.getItem(k) ?? d; } catch (_) { return d; } }
@@ -199,6 +200,12 @@ async function handleError(e, mount) {
     toast(msg, true);
   }
 }
+
+/* 화면 전환 세대 표시.
+   느린 응답이 뒤늦게 도착해 이미 바뀐 화면을 덮어쓰지 않도록,
+   각 화면 함수는 시작할 때 세대를 기억하고 그리기 직전에 아직 유효한지 확인한다. */
+function newRender() { return ++state.renderSeq; }
+function stale(seq) { return seq !== state.renderSeq; }
 
 function skeleton(n) {
   let h = '<div class="grid">';
@@ -435,8 +442,10 @@ function wireCards(mount, onOpen) {
  *  8. 화면: 1단계 행성 (2.6)
  * ============================================================ */
 async function viewPlanets(mount) {
+  const seq = state.renderSeq;
   mount.innerHTML = '<h2 class="section-title">' + esc(t('planets.title')) + '</h2>' + skeleton(4);
   const [planets, counts] = await Promise.all([API.catalog.planets(), API.counts.byPlanet()]);
+  if (stale(seq)) return;
   state.planets = planets;
 
   const myLevel = state.profile ? state.profile.level : 0;
@@ -475,10 +484,12 @@ async function viewPlanets(mount) {
  *  9. 화면: 2단계 대분류 (2.7)
  * ============================================================ */
 async function viewCategories(mount, r) {
+  const seq = state.renderSeq;
   mount.innerHTML = '<h2 class="section-title">' + esc(t('cat.title')) + '</h2>' + skeleton(3);
   const [cats, counts] = await Promise.all([
     API.catalog.categories(), API.counts.byCategory(r.planet)
   ]);
+  if (stale(seq)) return;
   state.categories = cats;
 
   const rows = cats.map(c => {
@@ -508,11 +519,13 @@ async function viewCategories(mount, r) {
  *  10. 화면: 3단계 중분류 (2.8)
  * ============================================================ */
 async function viewSubcategories(mount, r) {
+  const seq = state.renderSeq;
   mount.innerHTML = '<h2 class="section-title">' + esc(t('sub.title')) + '</h2>' + skeleton(3);
   const [subs, counts] = await Promise.all([
     API.catalog.subcategories(r.planet, r.category),
     API.counts.bySubcategory(r.planet, r.category)
   ]);
+  if (stale(seq)) return;
 
   if (!subs.length) { mount.innerHTML = emptyBox(); return; }
 
@@ -552,6 +565,7 @@ function sortSelect() {
 }
 
 async function viewRecords(mount, r) {
+  const seq = state.renderSeq;
   const key = [r.planet, r.category, r.sub, state.sort].join('|');
   if (state.list.key !== key) state.list = { rows: [], offset: 0, done: false, key };
 
@@ -566,6 +580,7 @@ async function viewRecords(mount, r) {
     planetId: r.planet, categoryId: r.category, subcategoryId: r.sub,
     sort: state.sort, lang: state.lang, offset: 0
   });
+  if (stale(seq)) return;
   state.list.rows = rows;
   state.list.offset = rows.length;
   state.list.done = rows.length < API.PAGE_SIZE;
@@ -573,6 +588,7 @@ async function viewRecords(mount, r) {
   paint();
 
   function paint() {
+    if (stale(seq)) return;
     if (!state.list.rows.length) { mount.innerHTML = head + emptyBox(); bindSort(); return; }
     mount.innerHTML = head + '<div class="grid">' +
       state.list.rows.map(x => recordCard(x)).join('') + '</div>' +
@@ -589,6 +605,7 @@ async function viewRecords(mount, r) {
           planetId: r.planet, categoryId: r.category, subcategoryId: r.sub,
           sort: state.sort, lang: state.lang, offset: state.list.offset
         });
+        if (stale(seq)) return;
         state.list.rows = state.list.rows.concat(next);
         state.list.offset += next.length;
         state.list.done = next.length < API.PAGE_SIZE;
@@ -612,8 +629,10 @@ async function viewRecords(mount, r) {
  *  12. 화면: 북마크 / 내가 쓴 기록 / 검색
  * ============================================================ */
 async function viewBookmarks(mount) {
+  const seq = state.renderSeq;
   mount.innerHTML = '<h2 class="section-title">' + esc(t('book.title')) + '</h2>' + skeleton(2);
   const rows = await API.bookmarks.list();
+  if (stale(seq)) return;
   if (!rows.length) {
     mount.innerHTML = '<h2 class="section-title">' + esc(t('book.title')) + '</h2>' +
                       emptyBox('book.empty', 'empty.body');
@@ -628,8 +647,10 @@ async function viewBookmarks(mount) {
 }
 
 async function viewMine(mount) {
+  const seq = state.renderSeq;
   mount.innerHTML = '<h2 class="section-title">' + esc(t('mine.title')) + '</h2>' + skeleton(2);
   const rows = await API.records.mine();
+  if (stale(seq)) return;
   if (!rows.length) {
     mount.innerHTML = '<h2 class="section-title">' + esc(t('mine.title')) + '</h2>' +
                       emptyBox('mine.empty', 'empty.body');
@@ -664,6 +685,7 @@ async function viewMine(mount) {
 }
 
 async function viewSearch(mount, r) {
+  const seq = state.renderSeq;
   const q = r.q || '';
   const head = '<h2 class="section-title">' + esc(t('search.title')) + '</h2>' +
     '<form class="list-head" id="search-form"><div class="field" style="flex:1 1 260px;margin:0">' +
@@ -687,6 +709,7 @@ async function viewSearch(mount, r) {
   let rows;
   try { rows = await API.records.search(q); }
   catch (e) { return handleError(e, box); }
+  if (stale(seq)) return;
 
   if (!rows.length) { box.innerHTML = emptyBox('search.empty', 'empty.body'); return; }
   box.innerHTML = '<div class="grid">' + rows.map(x => {
@@ -708,12 +731,14 @@ async function viewSearch(mount, r) {
  *     트리거가 관리자 여부를 서버에서 다시 확인한다.
  * ============================================================ */
 async function viewAdmin(mount) {
+  const seq = state.renderSeq;
   if (!state.profile || !state.profile.is_admin) {
     mount.innerHTML = emptyBox('err.forbidden', 'err.forbidden');
     return;
   }
   mount.innerHTML = '<h2 class="section-title">' + esc(t('admin.title')) + '</h2>' + skeleton(2);
   const rows = await API.records.hidden();
+  if (stale(seq)) return;
 
   if (!rows.length) {
     mount.innerHTML = '<h2 class="section-title">' + esc(t('admin.title')) + '</h2>' +
@@ -766,9 +791,11 @@ async function openRecordModal(code, r) {
   state.modal.lastFocus = document.activeElement;
   state.modal.fromCode = code;      // 목록이 다시 그려져도 카드를 찾아갈 수 있도록
 
+  const seq = state.renderSeq;
   let row;
   try { row = await API.records.byCode(code); }
   catch (e) { handleError(e); closeRecordModal(); return; }
+  if (stale(seq)) return;               // 이미 다른 화면으로 떠났다
   state.modal.record = row;
 
   document.getElementById('modal-record-title').textContent = pick(row.title);
@@ -942,10 +969,12 @@ function formFieldSet(id, labelKey, type, note) {
 }
 
 async function viewForm(mount, editing) {
+  const seq = state.renderSeq;
   const isEdit = !!editing;
   mount.innerHTML = skeleton(1);
 
   const [planets, cats] = await Promise.all([API.catalog.planets(), API.catalog.categories()]);
+  if (stale(seq)) return;
   state.planets = planets; state.categories = cats;
 
   let rec = null;
@@ -1118,6 +1147,7 @@ async function viewForm(mount, editing) {
 async function render() {
   const r = state.route;
   if (!r) return;
+  newRender();
 
   if (PUBLIC_ROUTES.includes(r.name)) { showScreen('screen-' + r.name); return; }
 
@@ -1195,6 +1225,7 @@ async function onRouteChange() {
   // 이미 그려진 목록 위에서 모달만 여는 이동도 마찬가지.
   // 목록을 다시 그리면 방금 누른 카드가 사라져 포커스를 되돌릴 곳이 없어진다.
   if (prev && prev.name === 'records' && r.name === 'record' && samePath) {
+    newRender();
     renderCrumbs(r);
     await openRecordModal(r.code, r);
     return;
