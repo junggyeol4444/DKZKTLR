@@ -244,7 +244,7 @@ alter table public.profiles add constraint profiles_lang_check check (lang in ('
 
 ```bash
 cd test && npm install
-./run.sh            # 113개 검사
+./run.sh            # 126개 검사
 ```
 
 자세한 내용과 환경 변수는 `test/README.md` 를 보세요.

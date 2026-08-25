@@ -310,6 +310,11 @@ declare
   v_dup  int;
   v_no   int;
 begin
+  -- 형식 검증을 먼저 한다. 뒤로 미루면 길이가 잘못된 입력이
+  -- 중복이나 작성 간격 같은 업무 규칙 오류로 먼저 걸려 안내가 어긋난다.
+  perform public.validate_record_payload(
+    new.title, new.summary, new.content, new.tags, new.source, new.level);
+
   if v_uid is not null then
     -- 클라이언트가 보낸 서버 소유 필드는 모두 무시하고 서버 값으로 덮어씀
     new.author_id  := v_uid;
@@ -358,9 +363,6 @@ begin
       raise exception 'AKASHIC_DUPLICATE';
     end if;
   end if;
-
-  perform public.validate_record_payload(
-    new.title, new.summary, new.content, new.tags, new.source, new.level);
 
   -- 행성별 일련번호 발급 (동시 등록 충돌 방지)
   insert into public.record_counters (planet_id, last_no)
