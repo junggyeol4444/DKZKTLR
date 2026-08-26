@@ -27,23 +27,38 @@ export CHROMIUM="${CHROMIUM:-/opt/pw-browsers/chromium}"
 export PLAYWRIGHT="${PLAYWRIGHT:-playwright}"
 
 PGBIN="${PGBIN:-$(dirname "$(command -v initdb || echo /usr/lib/postgresql/16/bin/initdb)")}"
+# SKIP_PG_SETUP=1 이면 이미 떠 있는 데이터베이스에 붙는다 (PGSOCKET 에 호스트명도 가능)
 PGDATA_DIR="$WORK/data"
 
-mkdir -p "$WORK" "$PGSOCKET" "$SHOTS_DIR"
+mkdir -p "$WORK" "$SHOTS_DIR"
+# 외부 데이터베이스에 붙을 때는 PGSOCKET 이 소켓 디렉터리가 아니라 호스트명이다
+[ "${SKIP_PG_SETUP:-0}" = "1" ] || mkdir -p "$PGSOCKET"
 
-db_reset() {
-  "$PGBIN/pg_ctl" -D "$PGDATA_DIR" -m fast stop >/dev/null 2>&1 || true
-  rm -rf "$PGDATA_DIR"
-  "$PGBIN/initdb" -D "$PGDATA_DIR" -U postgres --auth=trust >/dev/null
-  "$PGBIN/pg_ctl" -D "$PGDATA_DIR" \
-    -o "-p $PGPORT_TEST -k $PGSOCKET" -l "$WORK/pg.log" start >/dev/null
-  sleep 2
+load_sql() {
   for f in "$HERE/bootstrap.sql" "$ROOT/sql/schema.sql" "$ROOT/sql/rls.sql" "$ROOT/sql/seed.sql"; do
     if ! psql -h "$PGSOCKET" -p "$PGPORT_TEST" -U postgres -v ON_ERROR_STOP=1 -q -f "$f" 2>&1 \
          | grep -Ei '^(ERROR|FATAL)'; then :; else
       echo "적재 실패: $f"; exit 1
     fi
   done
+}
+
+db_reset() {
+  if [ "${SKIP_PG_SETUP:-0}" = "1" ]; then
+    # 이미 떠 있는 데이터베이스를 쓴다 (CI 의 서비스 컨테이너 등).
+    # 클러스터를 새로 만드는 대신 스키마만 비운다.
+    psql -h "$PGSOCKET" -p "$PGPORT_TEST" -U postgres -v ON_ERROR_STOP=1 -q -c \
+      'drop schema if exists public cascade; create schema public;' >/dev/null
+    load_sql
+    return
+  fi
+  "$PGBIN/pg_ctl" -D "$PGDATA_DIR" -m fast stop >/dev/null 2>&1 || true
+  rm -rf "$PGDATA_DIR"
+  "$PGBIN/initdb" -D "$PGDATA_DIR" -U postgres --auth=trust >/dev/null
+  "$PGBIN/pg_ctl" -D "$PGDATA_DIR" \
+    -o "-p $PGPORT_TEST -k $PGSOCKET" -l "$WORK/pg.log" start >/dev/null
+  sleep 2
+  load_sql
 }
 
 shim_start() {
@@ -58,7 +73,8 @@ shim_start() {
 
 cleanup() {
   [ -n "${SHIM_PID:-}" ] && kill "$SHIM_PID" 2>/dev/null || true
-  "$PGBIN/pg_ctl" -D "$PGDATA_DIR" -m fast stop >/dev/null 2>&1 || true
+  [ "${SKIP_PG_SETUP:-0}" = "1" ] || \
+    "$PGBIN/pg_ctl" -D "$PGDATA_DIR" -m fast stop >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 

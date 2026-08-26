@@ -25,8 +25,9 @@ const UMD  = process.env.SUPABASE_UMD ||
 const pool = new Pool({
   host: process.env.PGSOCKET || '/tmp/akashic-pg',
   port: Number(process.env.PGPORT_TEST || 5439),
-  user: 'postgres',
-  database: 'postgres'
+  user: process.env.PGUSER || 'postgres',
+  password: process.env.PGPASSWORD || undefined,
+  database: process.env.PGDATABASE || 'postgres'
 });
 
 const b64u = o => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -213,7 +214,16 @@ http.createServer(async (req, res) => {
 
       if (req.method === 'GET') {
         const f = buildFilters(params, 1);
-        let sql = `select * from public."${rest}"` + f.sql + buildOrder(u.searchParams);
+        // select= 를 그대로 반영한다. 모든 컬럼을 읽어 버리면
+        // 컬럼 단위로 회수한 권한이 검사에 걸리지 않아, 실제로는 되는 조회가 여기서만 막힌다.
+        const sel = u.searchParams.get('select');
+        let cols = '*';
+        if (sel && sel !== '*') {
+          const names = sel.split(',').map(x => x.split(':').pop().trim())
+                           .filter(x => IDENT.test(x));
+          if (names.length) cols = names.map(x => `"${x}"`).join(', ');
+        }
+        let sql = `select ${cols} from public."${rest}"` + f.sql + buildOrder(u.searchParams);
         const lim = u.searchParams.get('limit'), off = u.searchParams.get('offset');
         if (lim && /^\d+$/.test(lim)) sql += ' limit ' + lim;
         if (off && /^\d+$/.test(off)) sql += ' offset ' + off;

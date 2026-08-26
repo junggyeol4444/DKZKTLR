@@ -193,6 +193,40 @@ if (reached) {
   check('도달한 카드에서 Enter 로 모달이 열림', await page.isVisible('#modal-record'));
 }
 
+/* ---------- 4.3 / 7.1 등급을 스스로 올릴 수 없는가 ----------
+   등급은 record_views 의 행 수로 산정된다. 열지 않은 기록의 id 를 넣어
+   등급을 올릴 수 있으면, level 컬럼을 막아 둔 의미가 없어진다. */
+const before = Number(sql("select level from public.profiles p join auth.users u on u.id=p.id where u.email='hard@test.io'"));
+const loggedBefore = Number(sql("select count(*) from public.record_views v join auth.users u on u.id=v.user_id where u.email='hard@test.io'"));
+const attack = await page.evaluate(async () => {
+  const sb = window.AKASHIC_SB.sb;
+  const { data: u } = await sb.auth.getUser();
+  const { data: ids } = await sb.from('records').select('id').limit(60);
+  const out = { harvested: (ids || []).length };
+  const res = await sb.from('record_views')
+    .insert((ids || []).map(r => ({ user_id: u.user.id, record_id: r.id })));
+  out.direct = res.error ? (res.error.code || res.error.message) : 'no-error';
+  // RPC 경로로 등급 초과 기록을 찍어 보기
+  const { data: high } = await sb.from('v_records').select('id,level').gt('level', 2).limit(20);
+  for (const r of (high || [])) await window.AKASHIC_API.views.touch(r.id);
+  out.highTouched = (high || []).length;
+  return out;
+});
+const after = Number(sql("select level from public.profiles p join auth.users u on u.id=p.id where u.email='hard@test.io'"));
+const logged = Number(sql("select count(*) from public.record_views v join auth.users u on u.id=v.user_id where u.email='hard@test.io'"));
+check('7.1 record_views 에 직접 쓸 수 없고, 등급 초과 기록은 열람으로 기록되지 않음',
+      attack.harvested > 0 && attack.direct !== 'no-error' &&
+      after === before && logged === loggedBefore,
+      `수집한 id ${attack.harvested} 직접쓰기=${attack.direct} 등급 ${before}->${after} ` +
+      `열람기록 ${loggedBefore}->${logged}`);
+
+/* 열람 가능한 기록은 정상적으로 기록되어야 한다 */
+const okId = sql("select id from public.records where status='published' and deleted_at is null and level<=2 order by id limit 1");
+await page.evaluate(id => window.AKASHIC_API.views.touch(Number(id)), okId);
+await page.waitForTimeout(700);
+check('열람 가능한 기록은 그대로 열람 기록에 남음',
+      Number(sql(`select count(*) from public.record_views v join auth.users u on u.id=v.user_id where u.email='hard@test.io' and v.record_id=${okId}`)) === 1);
+
 await browser.close();
 process.exit(summary() ? 1 : 0);
 })().catch(e => { console.error('RUNNER ERROR', e); process.exit(1); });

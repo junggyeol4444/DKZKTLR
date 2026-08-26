@@ -237,7 +237,12 @@ create or replace function public.recalc_level() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare v_cnt int; v_new int;
 begin
-  select count(*) into v_cnt from public.record_views where user_id = new.user_id;
+  select count(*) into v_cnt
+    from public.record_views v
+    join public.records r on r.id = v.record_id
+   where v.user_id = new.user_id
+     and r.status = 'published'
+     and r.deleted_at is null;
   v_new := case
              when v_cnt >= 60 then 5
              when v_cnt >= 30 then 4
@@ -665,8 +670,23 @@ $$;
 create or replace function public.touch_record_view(p_record_id bigint)
 returns void
 language plpgsql security definer set search_path = public as $$
+declare v_ok boolean;
 begin
   if auth.uid() is null then return; end if;
+
+  -- 등급은 이 표의 행 수로 산정되므로(4.3), 실제로 열람할 수 있었던 기록만 남긴다.
+  -- 그렇지 않으면 열지도 않은 기록의 id 를 넣어 등급을 스스로 올릴 수 있다.
+  select ((r.level <= public.current_level() and pl.required_level <= public.current_level())
+          or r.author_id = auth.uid())
+    into v_ok
+    from public.records r
+    join public.planets pl on pl.id = r.planet_id
+   where r.id = p_record_id
+     and r.status = 'published'
+     and r.deleted_at is null;
+
+  if not coalesce(v_ok, false) then return; end if;
+
   insert into public.record_views (user_id, record_id, viewed_at)
        values (auth.uid(), p_record_id, now())
   on conflict (user_id, record_id) do update set viewed_at = now();
@@ -710,7 +730,9 @@ grant select (id, keeper_code, display_name, level) on public.profiles to anon, 
 grant update (display_name, lang) on public.profiles to authenticated;
 
 grant select, insert, delete on public.bookmarks    to authenticated;
-grant select, insert, update on public.record_views to authenticated;
+-- record_views 에는 직접 쓰지 못하게 한다.
+-- touch_record_view() 만 쓰기 경로이며 그 안에서 열람 가능 여부를 확인한다.
+grant select on public.record_views to authenticated;
 grant insert on public.reports to authenticated;
 grant select on public.reports to authenticated;   -- 실제 노출은 RLS(관리자)로 차단
 grant usage, select on sequence public.reports_id_seq to authenticated;

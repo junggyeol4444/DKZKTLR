@@ -13,7 +13,7 @@ const BASE       = process.env.AKASHIC_BASE || 'http://127.0.0.1:5555';
 const ANON       = 'ANON-KEY-TEST';
 const PGSOCKET   = process.env.PGSOCKET || '/tmp/akashic-pg';
 const PGPORT     = process.env.PGPORT_TEST || '5439';
-const CHROMIUM   = process.env.CHROMIUM || '/opt/pw-browsers/chromium';
+const CHROMIUM   = process.env.CHROMIUM || '';   // 비우면 playwright 기본 브라우저
 const PLAYWRIGHT = process.env.PLAYWRIGHT || 'playwright';
 
 const { chromium } = require(PLAYWRIGHT);
@@ -22,7 +22,7 @@ const CFG = { url: BASE, anonKey: ANON };
 /* psql 한 줄 질의 */
 const sql = q => execFileSync(
   'psql', ['-h', PGSOCKET, '-p', PGPORT, '-U', 'postgres', '-tAc', q],
-  { encoding: 'utf8' }).trim();
+  { encoding: 'utf8', env: process.env }).trim();
 
 /* 결과 집계 */
 function reporter() {
@@ -40,7 +40,7 @@ function reporter() {
   return { check, summary, rows };
 }
 
-const launch = () => chromium.launch({ executablePath: CHROMIUM });
+const launch = () => chromium.launch(CHROMIUM ? { executablePath: CHROMIUM } : {});
 
 /* 브라우저 컨텍스트.
    supabase-js CDN 은 로컬 사본으로, 웹폰트는 빈 응답으로 대체한다. */

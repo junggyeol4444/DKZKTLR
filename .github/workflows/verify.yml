@@ -1,0 +1,72 @@
+name: verify
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  suites:
+    runs-on: ubuntu-latest
+
+    # PostgreSQL 15 와 17 양쪽에서 돌린다.
+    # Supabase 가 어느 쪽을 쓰든 sql/ 가 그대로 적재되는지 확인하기 위함이다.
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['15', '17']
+
+    services:
+      db:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      SKIP_PG_SETUP: '1'
+      PGSOCKET: localhost
+      PGPORT_TEST: '5432'
+      PGPASSWORD: postgres
+      SHIM_PORT: '5555'
+      AKASHIC_BASE: http://127.0.0.1:5555
+      SHOTS_DIR: ${{ github.workspace }}/shots
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: psql 설치
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: 의존성 설치
+        working-directory: test
+        run: |
+          npm install
+          npm install playwright
+          npx playwright install --with-deps chromium
+
+      - name: 시나리오 실행
+        working-directory: test
+        env:
+          PLAYWRIGHT: ${{ github.workspace }}/test/node_modules/playwright
+          PG_MODULE: ${{ github.workspace }}/test/node_modules/pg
+        run: ./run.sh
+
+      - name: 실패 시 스크린샷 보관
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shots-pg${{ matrix.postgres }}
+          path: ${{ env.SHOTS_DIR }}
+          if-no-files-found: ignore

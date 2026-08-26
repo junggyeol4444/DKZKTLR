@@ -109,9 +109,11 @@ create policy bookmarks_own on public.bookmarks
   for all to authenticated
   using (user_id = auth.uid()) with check (user_id = auth.uid());
 
+-- 열람 기록은 본인 것만 읽을 수 있고, 쓰기는 touch_record_view() 로만 한다.
+-- 직접 INSERT 를 허용하면 열람하지 않은 기록의 id 를 넣어 등급을 올릴 수 있다. (4.3 / 7.1)
 create policy record_views_own on public.record_views
-  for all to authenticated
-  using (user_id = auth.uid()) with check (user_id = auth.uid());
+  for select to authenticated
+  using (user_id = auth.uid());
 
 -- ------------------------------------------------------------
 -- 5. reports : INSERT 는 본인 명의로만, SELECT 는 관리자만
