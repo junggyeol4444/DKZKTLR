@@ -343,6 +343,12 @@ begin
       raise exception 'AKASHIC_LEVEL_EXCEEDED';
     end if;
 
+    -- 들어갈 수 없는 행성에는 남길 수 없다.
+    -- 화면에서 목록을 걸러도 요청은 직접 보낼 수 있으므로 여기서도 확인한다. (4.3)
+    if (select pl.required_level from public.planets pl where pl.id = new.planet_id) > v_lvl then
+      raise exception 'AKASHIC_PLANET_LOCKED';
+    end if;
+
     -- 하루 10건 제한
     select count(*) into v_cnt
       from public.records
@@ -425,6 +431,10 @@ begin
         select level into v_lvl from public.profiles where id = v_uid;
         if new.level > coalesce(v_lvl, 1) then
           raise exception 'AKASHIC_LEVEL_EXCEEDED';
+        end if;
+        if (select pl.required_level from public.planets pl where pl.id = new.planet_id)
+           > coalesce(v_lvl, 1) then
+          raise exception 'AKASHIC_PLANET_LOCKED';
         end if;
       end if;
     end if;

@@ -91,6 +91,7 @@ function setLang(lang) {
   });
   if (state.session && state.session.user) {
     API.auth.syncLang(state.session.user.id, lang);            // 계정 기본 언어도 갱신
+    renderSidebar();      // 사이드바는 t() 로 만들어져 data-i18n 치환 대상이 아니다
   }
   render();                                                   // 현재 화면 다시 그리기
 }
@@ -184,7 +185,8 @@ function errText(e) {
 async function handleError(e, mount) {
   if (e instanceof ApiError && e.code === 'session') {
     state.session = null; state.profile = null;
-    location.hash = '#/';
+    showScreen('screen-gate');          // 이미 #/ 이면 hashchange 가 없으므로 직접 전환한다
+    if (location.hash !== '#/') location.hash = '#/';
     toast(t('err.session'), true);
     return;
   }
@@ -413,7 +415,9 @@ function recordCard(row, opts) {
 function wireCards(mount, onOpen) {
   mount.querySelectorAll('.card[data-code]').forEach(card => {
     const open = ev => {
-      if (ev.target.closest('.bookmark-btn')) return;
+      // 카드 안의 링크나 버튼(북마크·수정·삭제)은 저마다 동작이 있다.
+      // 카드 클릭까지 겹치면 이동이 두 번 일어나 history 가 어긋난다.
+      if (ev.target.closest('a, button')) return;
       onOpen(card.dataset.code, card);
     };
     card.addEventListener('click', open);
@@ -576,14 +580,18 @@ async function viewRecords(mount, r) {
 
   if (!state.list.rows.length) mount.innerHTML = head + skeleton(4);
 
-  const rows = state.list.rows.length ? state.list.rows : await API.records.list({
-    planetId: r.planet, categoryId: r.category, subcategoryId: r.sub,
-    sort: state.sort, lang: state.lang, offset: 0
-  });
-  if (stale(seq)) return;
-  state.list.rows = rows;
-  state.list.offset = rows.length;
-  state.list.done = rows.length < API.PAGE_SIZE;
+  // 캐시된 목록을 다시 그릴 때 done 을 다시 계산하면 안 된다.
+  // 이미 여러 쪽을 이어 붙인 배열이라 PAGE_SIZE 와 비교하는 뜻이 달라진다.
+  if (!state.list.rows.length) {
+    const rows = await API.records.list({
+      planetId: r.planet, categoryId: r.category, subcategoryId: r.sub,
+      sort: state.sort, lang: state.lang, offset: 0
+    });
+    if (stale(seq)) return;
+    state.list.rows = rows;
+    state.list.offset = rows.length;
+    state.list.done = rows.length < API.PAGE_SIZE;
+  }
 
   paint();
 
@@ -890,6 +898,10 @@ async function openRecordModal(code, r) {
     }
   } catch (_) { /* 관련 기록 실패는 본문 열람을 막지 않는다 */ }
 
+  // 관련 기록을 기다리는 동안 화면을 떠났으면 열지 않는다.
+  // 여기서 열면 목록 위에 모달이 튀어나오고 뒤쪽 스크롤이 잠긴 채 남는다.
+  if (stale(seq)) return;
+
   box.hidden = false;
   document.body.classList.add('drawer-open');
   box.querySelector('.modal-box').focus({ preventScroll: true });
@@ -980,6 +992,7 @@ async function viewForm(mount, editing) {
   let rec = null;
   if (isEdit) {
     rec = await API.records.byCode(editing);
+    if (stale(seq)) return;
     if (!rec.is_mine) { mount.innerHTML = emptyBox('err.forbidden', 'err.forbidden'); return; }
   }
 
@@ -1004,7 +1017,9 @@ async function viewForm(mount, editing) {
     '<h2 class="panel-title">' + esc(t(isEdit ? 'form.edit' : 'form.new')) + '</h2>' +
     '<div class="form-row">' +
       '<div class="field"><label for="f-planet">' + esc(t('form.planet')) + '</label>' +
-        '<select id="f-planet">' + planets.map(p =>
+        '<select id="f-planet">' + planets
+          .filter(p => p.required_level <= myLevel)      // 못 들어가는 행성에는 쓸 수 없다
+          .map(p =>
           '<option value="' + esc(p.id) + '"' + (rec && rec.planet_id === p.id ? ' selected' : '') +
           '>' + esc(pick(p.name)) + '</option>').join('') + '</select></div>' +
       '<div class="field"><label for="f-cat">' + esc(t('form.category')) + '</label>' +
@@ -1110,9 +1125,12 @@ async function viewForm(mount, editing) {
     const level = Number($('#f-level').value);
 
     const fail = k => { err.textContent = t(k); return false; };
+    const tooLong = (o, n) => LANGS.some(l => (o[l] || '').length > n);
     if (!planetSel.value || !catSel.value || !subSel.value) return fail('form.err.path');
-    if (!title.ko || title.ko.length > 100) return fail('form.err.title');
-    if (!summary.ko || summary.ko.length > 300) return fail('form.err.summary');
+    // 서버는 세 언어를 모두 검사하므로 여기서도 그렇게 한다.
+    // ko 만 보면 en/ja 가 길 때 서버 오류로 넘어가 안내가 뭉툭해진다.
+    if (!title.ko || tooLong(title, 100)) return fail('form.err.title');
+    if (!summary.ko || tooLong(summary, 300)) return fail('form.err.summary');
     if (!content.ko) return fail('form.err.content');
     if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail('form.err.date');
     if (FORM.tags.length < 1 || FORM.tags.length > 8) return fail('form.err.tags');
@@ -1216,8 +1234,10 @@ async function onRouteChange() {
   const samePath = prev && prev.planet === r.planet &&
                    prev.category === r.category && prev.sub === r.sub;
 
-  // 모달만 닫히는 이동이면 목록을 다시 그리지 않는다
+  // 모달만 닫히는 이동이면 목록을 다시 그리지 않는다.
+  // 세대는 올려야 한다. 아직 열리는 중이던 모달이 뒤늦게 자기를 유효하다고 보고 열린다.
   if (prev && prev.name === 'record' && r.name === 'records' && samePath) {
+    newRender();
     closeRecordModal();
     return;
   }
@@ -1397,7 +1417,11 @@ function bindGlobal() {
   document.addEventListener('keydown', ev => {
     if (ev.key !== 'Escape') return;
     if (!document.getElementById('modal-report').hidden) { closeReportModal(); return; }
-    if (!modalEl().hidden) { leaveModal(); return; }
+    // 모달을 여는 중(아직 hidden)에도 ESC 는 먹어야 한다.
+    // 그러지 않으면 기다렸다가 모달이 뒤늦게 열린다.
+    if (!modalEl().hidden || (state.route && state.route.name === 'record')) {
+      leaveModal(); return;
+    }
     if (!drawer.hidden) closeDrawer();
   });
 
@@ -1432,7 +1456,9 @@ async function boot() {
   applyI18n(document);
   setLang(state.lang);
 
-  if (!window.AKASHIC_SB.configured) {
+  // 설정이 없거나 CDN 에서 supabase 번들을 못 받은 경우.
+  // sb 를 확인하지 않으면 아래에서 예외가 나 부팅 화면에 갇힌다.
+  if (!window.AKASHIC_SB.configured || !window.AKASHIC_SB.sb) {
     showScreen('screen-gate');
     toast(t('err.config'), true);
     state.booting = false;

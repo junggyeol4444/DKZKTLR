@@ -152,6 +152,23 @@ const revisions = sql(`select count(*) from public.records where record_code='${
 check('같은 기록을 두 탭에서 수정하면 나중 저장이 남고 행은 하나',
       finalTitle === '둘째 탭 수정' && revisions === '1', `${finalTitle} / 행=${revisions}`);
 
+/* ---------- 회귀: 관련 기록을 기다리는 사이 떠나면 모달이 열리지 않는다 ---------- */
+await delay(ctx, '**/rest/v1/rpc/get_related_records', 1800);
+await page.evaluate(() => { location.hash = '#/p/TERRA-001/c/TECH-004/s/ENERGY'; });
+await page.waitForTimeout(1400);
+await page.locator('.card[data-code]').first().click();
+await page.waitForTimeout(600);                  // 관련 기록 응답 전에
+await page.keyboard.press('Escape');
+await page.waitForTimeout(2600);                 // 응답이 도착하고도 남을 만큼
+const late = await page.evaluate(() => ({
+  modal: !document.getElementById('modal-record').hidden,
+  locked: document.body.classList.contains('drawer-open'),
+  hash: location.hash
+}));
+check('관련 기록이 늦게 도착해도 떠난 뒤에는 모달이 열리지 않음',
+      !late.modal && !late.locked, JSON.stringify(late));
+await ctx.unroute('**/rest/v1/rpc/get_related_records');
+
 await browser.close();
 process.exit(summary() ? 1 : 0);
 })().catch(e => { console.error('RUNNER ERROR', e); process.exit(1); });

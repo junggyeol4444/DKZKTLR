@@ -35,10 +35,21 @@ mkdir -p "$WORK" "$SHOTS_DIR"
 [ "${SKIP_PG_SETUP:-0}" = "1" ] || mkdir -p "$PGSOCKET"
 
 load_sql() {
+  # psql 은 오류를 'psql:<파일>:<줄>: ERROR: ...' 로 찍는다.
+  # 줄머리를 기준으로 찾으면 아무것도 걸리지 않아 실패가 성공으로 보고된다.
+  # 종료 상태를 먼저 보고, 출력에 남은 오류도 함께 확인한다.
+  local out
   for f in "$HERE/bootstrap.sql" "$ROOT/sql/schema.sql" "$ROOT/sql/rls.sql" "$ROOT/sql/seed.sql"; do
-    if ! psql -h "$PGSOCKET" -p "$PGPORT_TEST" -U postgres -v ON_ERROR_STOP=1 -q -f "$f" 2>&1 \
-         | grep -Ei '^(ERROR|FATAL)'; then :; else
-      echo "적재 실패: $f"; exit 1
+    if ! out=$(psql -h "$PGSOCKET" -p "$PGPORT_TEST" -U postgres \
+                    -v ON_ERROR_STOP=1 -q -f "$f" 2>&1); then
+      echo "적재 실패: $f"
+      printf '%s\n' "$out" | tail -20
+      exit 1
+    fi
+    if printf '%s' "$out" | grep -Eqi '(ERROR|FATAL):'; then
+      echo "적재 중 오류: $f"
+      printf '%s\n' "$out" | grep -Ei '(ERROR|FATAL):' | head -10
+      exit 1
     fi
   done
 }
@@ -62,6 +73,12 @@ db_reset() {
 }
 
 shim_start() {
+  # 앞선 셔임이 포트를 놓을 때까지 기다린다.
+  # 기다리지 않으면 죽어 가는 쪽이 준비 확인에 응답해 EADDRINUSE 를 가린다.
+  for _ in $(seq 1 20); do
+    curl -sf -o /dev/null "$AKASHIC_BASE/index.html" || break
+    sleep 0.3
+  done
   node "$HERE/shim.js" > "$WORK/shim.log" 2>&1 &
   SHIM_PID=$!
   for _ in $(seq 1 20); do

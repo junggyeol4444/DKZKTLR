@@ -258,6 +258,51 @@ await page.click('[data-unhide]'); await page.waitForTimeout(1500);
 const statusNow = sql(`select status from public.records where id=${victim}`);
 check('4.8 관리자가 숨김을 해제할 수 있음', statusNow === 'published', statusNow);
 
+/* ---------- 회귀: 언어를 바꾸면 사이드바도 따라간다 ----------
+   사이드바는 t() 로 만들어져 data-i18n 치환 대상이 아니다. */
+await page.evaluate(() => { location.hash = '#/'; }); await page.waitForTimeout(1200);
+await setLang(page, 'en'); await page.waitForTimeout(1200);
+const sideEn = await page.textContent('#sidebar-desktop .side-title');
+const newBtnEn = await page.textContent('#sidebar-desktop a[href="#/new"]');
+await setLang(page, 'ko'); await page.waitForTimeout(1200);
+const newBtnKo = await page.textContent('#sidebar-desktop a[href="#/new"]');
+check('4.4 언어 전환이 사이드바에도 즉시 반영',
+      /ARCHIVE STATUS/.test(sideEn) && /NEW RECORD/.test(newBtnEn) && /기록 작성/.test(newBtnKo),
+      `${newBtnEn.trim()} / ${newBtnKo.trim()}`);
+
+/* ---------- 회귀: 내가 쓴 기록의 수정 링크가 두 번 이동하지 않는다 ---------- */
+await page.evaluate(() => { location.hash = '#/mine'; }); await page.waitForTimeout(1500);
+const editLink = page.locator('.card[data-code] a[href^="#/edit/"]').first();
+if (await editLink.count()) {
+  await editLink.click(); await page.waitForTimeout(1500);
+  const landed = await page.evaluate(() => location.hash);
+  await page.goBack(); await page.waitForTimeout(1200);
+  const back = await page.evaluate(() => location.hash);
+  check('2.12 수정 링크는 한 번만 이동 (뒤로가기가 목록으로 돌아옴)',
+        landed.startsWith('#/edit/') && back === '#/mine', `${landed} -> ${back}`);
+} else {
+  check('2.12 수정 링크는 한 번만 이동 (뒤로가기가 목록으로 돌아옴)', false, '수정 링크 없음');
+}
+
+/* ---------- 회귀: 진입할 수 없는 행성에는 작성할 수 없다 ---------- */
+sql("update public.planets set status='RESTRICTED', required_level=4 where id='EXOPLANET-PCB'");
+await page.evaluate(() => { location.hash = '#/new'; }); await page.waitForTimeout(1500);
+const options = await page.locator('#f-planet option').evaluateAll(o => o.map(x => x.value));
+const serverSide = await page.evaluate(async () => {
+  try {
+    await window.AKASHIC_API.records.create({
+      planet_id: 'EXOPLANET-PCB', category_id: 'EVENT-006', subcategory_id: 'DISCOVERY',
+      title: { ko: '잠긴 행성 시도' }, summary: { ko: '요약' }, content: { ko: '본문' },
+      event_date: null, tags: ['t'], source: '출처', level: 1
+    });
+    return 'no-error';
+  } catch (e) { return e.code; }
+});
+check('4.3 잠긴 행성은 작성 목록에서 빠지고 요청도 서버가 거부',
+      !options.includes('EXOPLANET-PCB') && serverSide === 'AKASHIC_PLANET_LOCKED',
+      `목록=${options.join(',')} 서버=${serverSide}`);
+sql("update public.planets set status='DORMANT', required_level=1 where id='EXOPLANET-PCB'");
+
 await browser.close();
 process.exit(summary() ? 1 : 0);
 })().catch(e=>{console.error('RUNNER ERROR',e);process.exit(1);});
