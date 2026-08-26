@@ -23,7 +23,12 @@ export SHIM_PORT="${SHIM_PORT:-5555}"
 export AKASHIC_BASE="${AKASHIC_BASE:-http://127.0.0.1:$SHIM_PORT}"
 export AKASHIC_ROOT="$ROOT"
 export SHOTS_DIR="${SHOTS_DIR:-$WORK/shots}"
-export CHROMIUM="${CHROMIUM:-/opt/pw-browsers/chromium}"
+# Chromium 실행 파일을 직접 지정한 경우에만 넘긴다.
+# 존재하지 않는 기본 경로를 넣으면 playwright 가 자기 브라우저를 쓰지 못한다.
+if [ -z "${CHROMIUM:-}" ] && [ -x /opt/pw-browsers/chromium ]; then
+  CHROMIUM=/opt/pw-browsers/chromium
+fi
+export CHROMIUM="${CHROMIUM:-}"
 export PLAYWRIGHT="${PLAYWRIGHT:-playwright}"
 
 PGBIN="${PGBIN:-$(dirname "$(command -v initdb || echo /usr/lib/postgresql/16/bin/initdb)")}"
