@@ -52,7 +52,7 @@ LocalStorage는 `akashic_lang`, `akashic_sort`, `akashic_motion`만 사용합니
 
 이미 이전 버전을 설치했다면 전체 스키마를 다시 실행하지 말고 `sql/migrations/001_moderation_council.sql`을 한 번 실행합니다. 이 마이그레이션은 기존의 “신고 3건 즉시 숨김” 트리거를 제거하고 검토 회의 및 관리자 투표 테이블로 교체합니다.
 
-그 다음 `sql/migrations/002_records_completion.sql`을 실행해 기록 필드 무결성 검사, 자기 신고 차단과 관련 기록 추천 RPC를 추가합니다. 마이그레이션 파일은 번호 순서대로 한 번씩 실행해야 합니다.
+그 다음 `sql/migrations/002_records_completion.sql`을 실행해 기록 필드 무결성 검사, 자기 신고 차단, 안전한 전문 검색·열람 RPC와 관련 기록 추천을 추가합니다. 마이그레이션 파일은 번호 순서대로 한 번씩 실행해야 합니다.
 
 ```js
 window.AKASHIC_CONFIG = {
@@ -69,6 +69,8 @@ window.AKASHIC_CONFIG = {
 - 기록의 작성자와 등급은 DB 트리거와 정책에서 다시 검사합니다.
 - `profiles.level`, `profiles.is_admin`, `keeper_code`에는 클라이언트 UPDATE 권한이 없습니다.
 - `get_record_for_reader()`는 사용자의 DB 등급을 확인하고, 부족하면 `content`를 `NULL`로 반환합니다.
+- `records.content`와 검색용 `search_document`에는 authenticated SELECT 권한이 없습니다. 검색은 검색 벡터를 응답하지 않는 전용 RPC로만 처리됩니다.
+- `record_views`에는 클라이언트 INSERT/UPDATE 권한이 없습니다. 실제 상세 조회 RPC가 성공한 경우에만 서버가 열람을 기록합니다.
 - 삭제는 `deleted_at`을 사용하는 소프트 삭제이며, FK에는 하드 삭제 시 `ON DELETE CASCADE`가 적용됩니다.
 - 실제 운영에서는 SQL Editor에서 관리자 프로필의 `is_admin`만 직접 지정하고 정기 백업 및 신고 검토 절차를 마련해야 합니다.
 
@@ -105,13 +107,16 @@ python3 -m http.server 4173
 
 ## 개발 검증
 
-외부 테스트 프레임워크 없이 저장소 구조, 시드 수, 보안 규칙, LocalStorage 제한과 번역 키를 확인할 수 있습니다.
+빠른 정적 검사와 실제 PostgreSQL 통합 검사를 모두 제공합니다. 통합 검사는 임시 PostgreSQL 클러스터에 스키마·RLS·시드·마이그레이션을 실제 적재하고 권한 공격 시나리오를 실행합니다.
 
 ```bash
 node tests/verify.mjs
 node --check app.js
 node --check api.js
+test/run.sh
 ```
+
+`test/run.sh`는 다음을 실제 DB 권한으로 검증합니다: 스키마 설치, 고등급 본문 직접 SELECT 차단, 검색 벡터 차단, `record_views` 직접 조작 차단, RPC 본문 검열과 실제 열람 기록, 이메일 인증 사용자 작성, 3번째 신고의 검토 회의 생성, 백만 번째 기록 코드와 천 번째 KEEPER 코드 경계. GitHub Actions는 PostgreSQL 15와 17에서 같은 검사를 실행합니다.
 
 ## 다국어 확장
 

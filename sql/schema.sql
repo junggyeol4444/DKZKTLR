@@ -35,9 +35,9 @@ create table public.records (
   title jsonb not null check (title ? 'ko' and char_length(title->>'ko') between 1 and 100),
   summary jsonb not null check (summary ? 'ko' and char_length(summary->>'ko') between 1 and 300),
   content jsonb not null check (content ? 'ko' and char_length(content->>'ko') >= 1),
-  search_document tsvector generated always as (to_tsvector('simple'::regconfig,coalesce(title->>'ko','')||' '||coalesce(title->>'en','')||' '||coalesce(title->>'ja','')||' '||coalesce(summary->>'ko','')||' '||coalesce(summary->>'en','')||' '||coalesce(summary->>'ja','')||' '||coalesce(content->>'ko','')||' '||coalesce(content->>'en','')||' '||coalesce(content->>'ja','')||' '||array_to_string(tags,' '))) stored,
   event_date date,
   tags text[] not null check (cardinality(tags) between 1 and 8),
+  search_document tsvector not null default ''::tsvector,
   source text not null check (source ~ '^https?://'),
   level int not null default 1 check (level between 1 and 5),
   related_ids bigint[] not null default '{}',
@@ -77,10 +77,25 @@ create index records_tags_idx on public.records using gin(tags);
 create index records_search_idx on public.records using gin(search_document);
 create index record_views_recent_idx on public.record_views(user_id,viewed_at desc);
 
-create or replace function public.new_profile() returns trigger language plpgsql security definer set search_path='' as $$
+-- array_to_string is STABLE on supported PostgreSQL versions, so this must be a
+-- trigger-maintained column rather than an invalid generated column.
+create or replace function public.refresh_record_search() returns trigger language plpgsql set search_path='' as $$
 begin
+ new.search_document:=to_tsvector('simple'::regconfig,
+  coalesce(new.title->>'ko','')||' '||coalesce(new.title->>'en','')||' '||coalesce(new.title->>'ja','')||' '||
+  coalesce(new.summary->>'ko','')||' '||coalesce(new.summary->>'en','')||' '||coalesce(new.summary->>'ja','')||' '||
+  coalesce(new.content->>'ko','')||' '||coalesce(new.content->>'en','')||' '||coalesce(new.content->>'ja','')||' '||
+  array_to_string(new.tags,' '));
+ return new;
+end $$;
+create trigger refresh_record_search_before_write before insert or update of title,summary,content,tags on public.records for each row execute procedure public.refresh_record_search();
+
+create or replace function public.new_profile() returns trigger language plpgsql security definer set search_path='' as $$
+declare keeper_no bigint;
+begin
+ keeper_no:=nextval('public.keeper_code_seq');
  insert into public.profiles(id,keeper_code,display_name,lang)
- values(new.id,'KEEPER-'||lpad(nextval('public.keeper_code_seq')::text,3,'0'),coalesce(nullif(new.raw_user_meta_data->>'display_name',''),'Anonymous'),coalesce(new.raw_user_meta_data->>'lang','en'));
+ values(new.id,'KEEPER-'||lpad(keeper_no::text,greatest(3,length(keeper_no::text)),'0'),coalesce(nullif(new.raw_user_meta_data->>'display_name',''),'Anonymous'),coalesce(new.raw_user_meta_data->>'lang','en'));
  return new;
 end $$;
 create trigger auth_user_profile after insert on auth.users for each row execute procedure public.new_profile();
@@ -98,19 +113,21 @@ begin
  if exists(select 1 from public.records where author_id=auth.uid() and title->>'ko'=new.title->>'ko' and content->>'ko'=new.content->>'ko' and deleted_at is null) then raise exception 'duplicate record'; end if;
  if not exists(select 1 from public.categories where id=new.category_id and domain_id=new.domain_id) then raise exception 'category does not belong to domain'; end if;
  seq_no:=new.id;
- new.record_code='ARC-'||upper(new.domain_id)||'-'||lpad(seq_no::text,6,'0'); new.created_at=now();
+ new.record_code='ARC-'||upper(new.domain_id)||'-'||lpad(seq_no::text,greatest(6,length(seq_no::text)),'0'); new.created_at=now();
  return new;
 end $$;
 create trigger prepare_record_before_insert before insert on public.records for each row when(new.is_seed=false) execute procedure public.prepare_record();
 
 create or replace function public.is_admin() returns boolean language sql stable security definer set search_path='' as $$select coalesce((select is_admin from public.profiles where id=auth.uid()),false)$$;
+create or replace function public.is_email_confirmed() returns boolean language sql stable security definer set search_path='' as $$select exists(select 1 from auth.users where id=auth.uid() and email_confirmed_at is not null)$$;
 
 create or replace function public.touch_record() returns trigger language plpgsql security definer set search_path='' as $$
 declare user_level int;
 begin
  if not public.is_admin() then
   if new.author_id<>old.author_id or new.record_code<>old.record_code then raise exception 'immutable record identity'; end if;
-  if new.status<>old.status or new.is_seed<>old.is_seed then raise exception 'moderation fields are server managed'; end if;
+  if new.status<>old.status and pg_trigger_depth()=1 then raise exception 'moderation fields are server managed'; end if;
+  if new.is_seed<>old.is_seed then raise exception 'seed flag is immutable'; end if;
   if old.deleted_at is not null then raise exception 'deleted records cannot be changed by clients'; end if;
   if old.deleted_at is null and new.deleted_at is not null then new.deleted_at=now(); end if;
   select level into user_level from public.profiles where id=auth.uid();
@@ -161,16 +178,28 @@ create trigger resolve_case_after_vote after insert or update on public.moderati
 -- Safe reader RPC: inaccessible content is returned as NULL, never sent to the browser.
 create or replace function public.get_record_for_reader(requested_code text)
 returns table(id bigint,record_code text,domain_id text,category_id text,title jsonb,summary jsonb,content jsonb,event_date date,tags text[],source text,level int,author_id uuid,created_at timestamptz,keeper_code text,domain_name jsonb,category_name jsonb,content_available boolean)
-language sql stable security definer set search_path='' as $$
- select r.id,r.record_code,r.domain_id,r.category_id,r.title,r.summary,
- case when r.level<=coalesce(p.level,0) then r.content else null end,
- r.event_date,r.tags,r.source,r.level,r.author_id,r.created_at,a.keeper_code,d.name,c.name,
- r.level<=coalesce(p.level,0)
- from public.records r join public.profiles a on a.id=r.author_id join public.domains d on d.id=r.domain_id join public.categories c on c.id=r.category_id left join public.profiles p on p.id=auth.uid()
- where r.record_code=requested_code and r.status in ('published','under_review') and r.deleted_at is null;
+language plpgsql volatile security definer set search_path='' as $$
+declare target_id bigint;
+begin
+ if auth.uid() is null then return;end if;
+ select r.id into target_id from public.records r where r.record_code=requested_code and r.status in('published','under_review') and r.deleted_at is null;
+ if target_id is null then return;end if;
+ insert into public.record_views(user_id,record_id,viewed_at) values(auth.uid(),target_id,now()) on conflict(user_id,record_id) do update set viewed_at=excluded.viewed_at;
+ return query select r.id,r.record_code,r.domain_id,r.category_id,r.title,r.summary,case when r.level<=p.level then r.content else null end,r.event_date,r.tags,r.source,r.level,r.author_id,r.created_at,a.keeper_code,d.name,c.name,r.level<=p.level
+ from public.records r join public.profiles a on a.id=r.author_id join public.domains d on d.id=r.domain_id join public.categories c on c.id=r.category_id join public.profiles p on p.id=auth.uid() where r.id=target_id;
+end;
 $$;
 revoke all on function public.get_record_for_reader(text) from public;
 grant execute on function public.get_record_for_reader(text) to authenticated;
+
+create or replace function public.get_own_record(requested_code text)
+returns table(id bigint,record_code text,domain_id text,category_id text,title jsonb,summary jsonb,content jsonb,event_date date,tags text[],source text,level int,status public.record_status,deleted_at timestamptz,created_at timestamptz,updated_at timestamptz)
+language sql stable security definer set search_path='' as $$
+ select r.id,r.record_code,r.domain_id,r.category_id,r.title,r.summary,r.content,r.event_date,r.tags,r.source,r.level,r.status,r.deleted_at,r.created_at,r.updated_at
+ from public.records r where r.record_code=requested_code and r.author_id=auth.uid();
+$$;
+revoke all on function public.get_own_record(text) from public;
+grant execute on function public.get_own_record(text) to authenticated;
 
 create or replace function public.get_related_records(requested_id bigint)
 returns table(id bigint,record_code text,title jsonb,summary jsonb,event_date date,tags text[],level int,keeper_code text,domain_name jsonb,category_name jsonb,score int)
@@ -192,8 +221,19 @@ grant execute on function public.get_related_records(bigint) to authenticated;
 
 create view public.record_catalog with (security_invoker=true) as
 select r.id,r.record_code,r.domain_id,r.category_id,r.title,r.summary,r.event_date,r.tags,r.level,r.author_id,r.status,r.deleted_at,r.created_at,p.keeper_code,d.name domain_name,c.name category_name,
-false as content_available,r.search_document
+false as content_available
 from public.records r join public.profiles p on p.id=r.author_id join public.domains d on d.id=r.domain_id join public.categories c on c.id=r.category_id;
+
+create or replace function public.search_record_catalog(search_query text,page_no int default 0)
+returns table(id bigint,record_code text,domain_id text,category_id text,title jsonb,summary jsonb,event_date date,tags text[],level int,author_id uuid,status public.record_status,created_at timestamptz,keeper_code text,domain_name jsonb,category_name jsonb,content_available boolean)
+language sql stable security definer set search_path='' as $$
+ select r.id,r.record_code,r.domain_id,r.category_id,r.title,case when r.level<=reader.level then r.summary else null end,r.event_date,r.tags,r.level,r.author_id,r.status,r.created_at,p.keeper_code,d.name,c.name,r.level<=reader.level
+ from public.records r join public.profiles p on p.id=r.author_id join public.profiles reader on reader.id=auth.uid() join public.domains d on d.id=r.domain_id join public.categories c on c.id=r.category_id
+ where r.status in('published','under_review') and r.deleted_at is null and r.search_document@@websearch_to_tsquery('simple'::regconfig,search_query)
+ order by ts_rank(r.search_document,websearch_to_tsquery('simple'::regconfig,search_query)) desc,r.created_at desc offset greatest(page_no,0)*20 limit 20;
+$$;
+revoke all on function public.search_record_catalog(text,int) from public;
+grant execute on function public.search_record_catalog(text,int) to authenticated;
 
 create view public.archive_statistics with (security_invoker=true) as
 select count(*) filter(where status in ('published','under_review') and deleted_at is null)::int record_count,count(*) filter(where status in ('published','under_review') and deleted_at is null and created_at>=date_trunc('day',now()))::int today_count,(select count(*)::int from public.profiles) keeper_count from public.records;
