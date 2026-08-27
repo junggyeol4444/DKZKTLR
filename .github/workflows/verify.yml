@@ -1,0 +1,32 @@
+name: verify
+on: [push, pull_request]
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['15','17']
+    services:
+      db:
+        image: postgres:${{ matrix.postgres }}
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      EXTERNAL_PG: '1'
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - run: chmod +x test/run.sh && test/run.sh
+      - run: node tests/verify.mjs && node --check app.js && node --check api.js && node --check i18n.js
