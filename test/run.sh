@@ -23,3 +23,4 @@ psql -v ON_ERROR_STOP=1 -d akashic_test -f "$ROOT/sql/seed.sql" >/dev/null
 # this executes the exact migration that previously failed on array_to_string.
 psql -v ON_ERROR_STOP=1 -d akashic_test -f "$ROOT/sql/migrations/002_records_completion.sql" >/dev/null
 psql -v ON_ERROR_STOP=1 -d akashic_test -f "$ROOT/test/security.sql"
+"$ROOT/test/concurrency.sh"

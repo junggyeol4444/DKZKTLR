@@ -23,7 +23,7 @@ grant update(display_name,lang) on public.profiles to authenticated;
 create policy "own profile editable" on public.profiles for update to authenticated using(id=auth.uid()) with check(id=auth.uid());
 
 create policy "published or own records readable" on public.records for select to authenticated using((status in ('published','under_review') and deleted_at is null) or author_id=auth.uid() or public.is_admin());
-create policy "verified users create records" on public.records for insert to authenticated with check(author_id=auth.uid() and public.is_email_confirmed());
+create policy "verified users create records" on public.records for insert to authenticated with check(author_id=auth.uid() and is_seed=false and public.is_email_confirmed());
 create policy "authors edit records" on public.records for update to authenticated using(author_id=auth.uid() or public.is_admin()) with check(author_id=auth.uid() or public.is_admin());
 create policy "admin hard delete" on public.records for delete to authenticated using(public.is_admin());
 
@@ -39,7 +39,8 @@ revoke all on public.profiles,public.domains,public.categories,public.records,pu
 grant select on public.domains,public.categories,public.record_catalog,public.archive_statistics to authenticated;
 grant select(id,keeper_code,display_name,level,lang,is_admin) on public.profiles to authenticated;
 grant select(id,record_code,domain_id,category_id,title,summary,event_date,tags,source,level,author_id,is_seed,status,deleted_at,created_at,updated_at) on public.records to authenticated;
-grant insert,update on public.records to authenticated;
+grant insert on public.records to authenticated;
+grant update(domain_id,category_id,title,summary,content,event_date,tags,source,level,related_ids,deleted_at) on public.records to authenticated;
 grant select,insert,delete on public.bookmarks to authenticated;
 grant select on public.record_views to authenticated;
 grant insert on public.reports to authenticated;

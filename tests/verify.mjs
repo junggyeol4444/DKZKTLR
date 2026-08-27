@@ -26,6 +26,16 @@ assert.doesNotMatch(api, /content_available:x\.records\.level<=2/, 'bookmark cle
 assert.doesNotMatch(rls, /grant select on public\.records to authenticated/, 'records content must not receive table-wide SELECT');
 assert.match(schema, /greatest\(6,length\(seq_no::text\)\)/);
 assert.match(schema, /greatest\(3,length\(keeper_no::text\)\)/);
+assert.doesNotMatch(schema, /prepare_record_before_insert[^\n]+when\s*\(new\.is_seed=false\)/i);
+assert.match(rls, /is_seed=false and public\.is_email_confirmed/);
+assert.doesNotMatch(rls, /grant insert,update on public\.records/);
+assert.match(schema, /new\.created_at<>old\.created_at/);
+assert.match(schema, /pg_advisory_xact_lock\(new\.record_id\)/);
+assert.match(schema, /case when r\.level<=p\.level then r\.summary else null end/);
+assert.match(api, /rpc\('get_moderation_cases'\)/);
+assert.doesNotMatch(api, /resetPasswordForEmail\([^\n]+#\/reset\/update/);
+assert.match(app, /event==='PASSWORD_RECOVERY'/);
+assert.match(app, /state\.bookmarks=session\?await ArchiveAPI\.bookmarkIds\(\):new Set\(\)/);
 assert.match(app, /#\/edit\//);
 assert.match(app, /data-action="translation"/);
 assert.match(app, /data-action="load-more"/);

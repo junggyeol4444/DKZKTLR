@@ -6,7 +6,10 @@ from(values
  ('10000000-0000-4000-a000-000000000001'::uuid,'reader@test.invalid','Reader'),
  ('10000000-0000-4000-a000-000000000002'::uuid,'report1@test.invalid','Report1'),
  ('10000000-0000-4000-a000-000000000003'::uuid,'report2@test.invalid','Report2'),
- ('10000000-0000-4000-a000-000000000004'::uuid,'report3@test.invalid','Report3'))v(id,email,name);
+ ('10000000-0000-4000-a000-000000000004'::uuid,'report3@test.invalid','Report3'),
+ ('10000000-0000-4000-a000-000000000007'::uuid,'race1@test.invalid','Race1'),
+ ('10000000-0000-4000-a000-000000000008'::uuid,'race2@test.invalid','Race2'),
+ ('10000000-0000-4000-a000-000000000009'::uuid,'race3@test.invalid','Race3'))v(id,email,name);
 insert into auth.users(instance_id,id,aud,role,email,email_confirmed_at,raw_app_meta_data,raw_user_meta_data)
 values('00000000-0000-0000-0000-000000000000','10000000-0000-4000-a000-000000000006','authenticated','authenticated','unconfirmed@test.invalid',null,'{}','{"display_name":"Unconfirmed"}');
 
@@ -28,11 +31,17 @@ do $$begin
  exception when insufficient_privilege then null;end;
  begin insert into public.record_views(user_id,record_id) select auth.uid(),id from public.records limit 1;raise exception 'record_views INSERT unexpectedly succeeded';
  exception when insufficient_privilege then null;end;
+ begin update public.records set search_document='injected'::tsvector where record_code='ARC-HISTORY-000002';raise exception 'search vector UPDATE unexpectedly succeeded';
+ exception when insufficient_privilege then null;end;
+ begin update public.records set created_at='2000-01-01' where record_code='ARC-HISTORY-000002';raise exception 'created_at UPDATE unexpectedly succeeded';
+ exception when insufficient_privilege then null;end;
+ begin insert into public.records(record_code,domain_id,category_id,title,summary,content,tags,source,level,author_id,is_seed) values('FORGED','HISTORY','MODERN','{"ko":"위조"}','{"ko":"위조"}','{"ko":"위조"}',array['위조'],'https://example.com',5,auth.uid(),true);raise exception 'client seed INSERT unexpectedly succeeded';
+ exception when raise_exception then if sqlerrm<>'seed records are migration-only' then raise;end if;end;
 end$$;
 
-do $$declare body jsonb;available boolean;begin
- select content,content_available into body,available from public.get_record_for_reader('ARC-SCIENCE-000008');
- if body is not null or available then raise exception 'LEVEL-4 body leaked through reader RPC';end if;
+do $$declare body jsonb;abstract jsonb;available boolean;begin
+ select summary,content,content_available into abstract,body,available from public.get_record_for_reader('ARC-SCIENCE-000008');
+ if abstract is not null or body is not null or available then raise exception 'LEVEL-4 summary/body leaked through reader RPC';end if;
  if(select count(*) from public.record_views where user_id=auth.uid())<>1 then raise exception 'reader RPC did not log exactly one real view';end if;
 end$$;
 
@@ -42,6 +51,7 @@ set role authenticated;
 select set_config('request.jwt.claim.sub','10000000-0000-4000-a000-000000000001',false);
 insert into public.records(domain_id,category_id,title,summary,content,event_date,tags,source,level,author_id)
 values('HISTORY','MODERN','{"ko":"코드 경계 시험"}','{"ko":"설치 검증용 기록"}','{"ko":"본문"}',current_date,array['검증'],'https://example.com/source',1,auth.uid());
+update public.records set title='{"ko":"코드 경계 시험 수정"}' where author_id=auth.uid() and record_code='ARC-HISTORY-1000000';
 do $$begin if not exists(select 1 from public.records where author_id=auth.uid() and record_code='ARC-HISTORY-1000000') then raise exception 'record code truncated at one million';end if;end$$;
 reset role;
 
@@ -59,6 +69,11 @@ do $$begin
  if(select status::text from public.records where record_code='ARC-HISTORY-000002')<>'under_review' then raise exception 'third report did not open review';end if;
  if(select count(*) from public.moderation_cases where status='open')<>1 then raise exception 'moderation case missing';end if;
 end$$;
+
+update public.profiles set is_admin=true where id='10000000-0000-4000-a000-000000000001';
+set role authenticated;select set_config('request.jwt.claim.sub','10000000-0000-4000-a000-000000000001',false);
+do $$declare body jsonb;begin select records->'content' into body from public.get_moderation_cases() where record_id=(select id from public.records where record_code='ARC-HISTORY-000002');if body is null then raise exception 'moderator cannot inspect reported content';end if;end$$;
+reset role;
 
 select setval('public.keeper_code_seq',999,true);
 insert into auth.users(instance_id,id,aud,role,email,email_confirmed_at,raw_app_meta_data,raw_user_meta_data)
