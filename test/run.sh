@@ -22,4 +22,12 @@ psql -v ON_ERROR_STOP=1 -d akashic_test -f "$ROOT/sql/seed.sql" >/dev/null
 # 002 must also be safe against a database that already has the completed schema;
 # this executes the exact migration that previously failed on array_to_string.
 psql -v ON_ERROR_STOP=1 -d akashic_test -f "$ROOT/sql/migrations/002_records_completion.sql" >/dev/null
+psql -v ON_ERROR_STOP=1 -d akashic_test -f "$ROOT/sql/migrations/003_security_hardening.sql" >/dev/null
+psql -v ON_ERROR_STOP=1 -d akashic_test -f "$ROOT/test/parallel_setup.sql" >/dev/null
+pids=()
+for reporter in 20000000-0000-4000-a000-000000000001 20000000-0000-4000-a000-000000000002 20000000-0000-4000-a000-000000000003; do
+  psql -v ON_ERROR_STOP=1 -v reporter="$reporter" -d akashic_test -f "$ROOT/test/parallel_report.sql" >/dev/null & pids+=("$!")
+done
+for pid in "${pids[@]}"; do wait "$pid"; done
+psql -v ON_ERROR_STOP=1 -d akashic_test -f "$ROOT/test/parallel_verify.sql"
 psql -v ON_ERROR_STOP=1 -d akashic_test -f "$ROOT/test/security.sql"

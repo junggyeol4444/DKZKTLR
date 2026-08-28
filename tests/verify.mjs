@@ -24,6 +24,12 @@ assert.doesNotMatch(api, /record_catalog'\)\.select\('\*'\)/, 'search lexemes mu
 assert.doesNotMatch(api, /record_views'\)\.(?:insert|upsert)/, 'view counts must only be written by the reader RPC');
 assert.doesNotMatch(api, /content_available:x\.records\.level<=2/, 'bookmark clearance must not be hard-coded');
 assert.doesNotMatch(rls, /grant select on public\.records to authenticated/, 'records content must not receive table-wide SELECT');
+assert.doesNotMatch(rls, /grant insert,update on public\.records/, 'record writes must use column grants');
+assert.match(schema, /pg_advisory_xact_lock\(new\.record_id\)/);
+assert.match(schema, /get_moderation_dossiers/);
+assert.match(api, /rpc\('get_moderation_dossiers'\)/);
+assert.match(app, /PASSWORD_RECOVERY/);
+assert.doesNotMatch(app, /const payload=\{author_id:/, 'edit payload must not include author_id');
 assert.match(schema, /greatest\(6,length\(seq_no::text\)\)/);
 assert.match(schema, /greatest\(3,length\(keeper_no::text\)\)/);
 assert.match(app, /#\/edit\//);

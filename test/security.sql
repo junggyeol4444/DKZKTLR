@@ -57,7 +57,7 @@ reset role;
 
 do $$begin
  if(select status::text from public.records where record_code='ARC-HISTORY-000002')<>'under_review' then raise exception 'third report did not open review';end if;
- if(select count(*) from public.moderation_cases where status='open')<>1 then raise exception 'moderation case missing';end if;
+ if(select count(*) from public.moderation_cases mc join public.records r on r.id=mc.record_id where mc.status='open' and r.record_code='ARC-HISTORY-000002')<>1 then raise exception 'moderation case missing';end if;
 end$$;
 
 select setval('public.keeper_code_seq',999,true);
@@ -66,3 +66,29 @@ values('00000000-0000-0000-0000-000000000000','10000000-0000-4000-a000-000000000
 do $$begin if not exists(select 1 from public.profiles where id='10000000-0000-4000-a000-000000000005' and keeper_code='KEEPER-1000') then raise exception 'keeper code truncated at 1000';end if;end$$;
 
 select 'database integration checks passed' result;
+
+-- Column grants and triggers must reject forged/server-managed fields.
+set role authenticated;
+select set_config('request.jwt.claim.sub','10000000-0000-4000-a000-000000000001',false);
+do $$declare target bigint; locked_summary jsonb;begin
+ select id into target from public.records where record_code='ARC-HISTORY-1000000';
+ begin update public.records set author_id='10000000-0000-4000-a000-000000000002' where id=target;raise exception 'author update unexpectedly succeeded'; exception when insufficient_privilege then null;end;
+ begin update public.records set record_code='FORGED' where id=target;raise exception 'record code update unexpectedly succeeded'; exception when insufficient_privilege then null;end;
+ begin update public.records set status='hidden' where id=target;raise exception 'status update unexpectedly succeeded'; exception when insufficient_privilege then null;end;
+ begin update public.records set is_seed=true where id=target;raise exception 'seed update unexpectedly succeeded'; exception when insufficient_privilege then null;end;
+ begin update public.records set created_at=now()-interval '1 year' where id=target;raise exception 'created_at update unexpectedly succeeded'; exception when insufficient_privilege then null;end;
+ begin update public.records set search_document='forged'::tsvector where id=target;raise exception 'search update unexpectedly succeeded'; exception when insufficient_privilege then null;end;
+ begin insert into public.records(domain_id,category_id,title,summary,content,tags,source,level,author_id,is_seed) values('HISTORY','MODERN','{"ko":"위조"}','{"ko":"위조"}','{"ko":"위조"}',array['위조'],'https://example.com',1,auth.uid(),true);raise exception 'seed insert unexpectedly succeeded'; exception when insufficient_privilege then null;end;
+ select summary into locked_summary from public.get_record_for_reader('ARC-SCIENCE-000008');
+ if locked_summary is not null then raise exception 'LEVEL-4 summary leaked through reader RPC';end if;
+ begin perform public.get_moderation_dossiers();raise exception 'non-admin moderation RPC unexpectedly succeeded'; exception when insufficient_privilege then null;end;
+end$$;
+reset role;
+update public.profiles set is_admin=true where id='10000000-0000-4000-a000-000000000005';
+set role authenticated;
+select set_config('request.jwt.claim.sub','10000000-0000-4000-a000-000000000005',false);
+do $$declare dossier jsonb;begin
+ select x into dossier from public.get_moderation_dossiers() x where (x->>'record_id')::bigint=(select id from public.records where record_code='ARC-HISTORY-000002');
+ if dossier is null or dossier->'records'->'content' is null or jsonb_array_length(dossier->'reports')<>3 then raise exception 'admin dossier omitted original content or reports';end if;
+end$$;
+reset role;

@@ -39,7 +39,9 @@ revoke all on public.profiles,public.domains,public.categories,public.records,pu
 grant select on public.domains,public.categories,public.record_catalog,public.archive_statistics to authenticated;
 grant select(id,keeper_code,display_name,level,lang,is_admin) on public.profiles to authenticated;
 grant select(id,record_code,domain_id,category_id,title,summary,event_date,tags,source,level,author_id,is_seed,status,deleted_at,created_at,updated_at) on public.records to authenticated;
-grant insert,update on public.records to authenticated;
+revoke insert,update on public.records from authenticated;
+grant insert(domain_id,category_id,title,summary,content,event_date,tags,source,level,related_ids,author_id) on public.records to authenticated;
+grant update(domain_id,category_id,title,summary,content,event_date,tags,source,level,related_ids,deleted_at) on public.records to authenticated;
 grant select,insert,delete on public.bookmarks to authenticated;
 grant select on public.record_views to authenticated;
 grant insert on public.reports to authenticated;
