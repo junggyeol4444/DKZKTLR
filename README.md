@@ -54,6 +54,8 @@ LocalStorage는 `akashic_lang`, `akashic_sort`, `akashic_motion`만 사용합니
 
 그 다음 `sql/migrations/002_records_completion.sql`을 실행해 기록 필드 무결성 검사, 자기 신고 차단, 안전한 전문 검색·열람 RPC와 관련 기록 추천을 추가합니다. 마이그레이션 파일은 번호 순서대로 한 번씩 실행해야 합니다.
 
+기존 설치에는 이어서 `sql/migrations/003_security_hardening.sql`을 적용해 컬럼 단위 쓰기 권한, 동시 신고 잠금, 등급별 응답 검열 및 관리자 전용 검토 RPC를 활성화합니다.
+
 ```js
 window.AKASHIC_CONFIG = {
   supabaseUrl: 'https://YOUR_PROJECT.supabase.co',
@@ -114,6 +116,7 @@ node tests/verify.mjs
 node --check app.js
 node --check api.js
 test/run.sh
+npm ci && npx playwright install chromium && npm run test:e2e
 ```
 
 `test/run.sh`는 다음을 실제 DB 권한으로 검증합니다: 스키마 설치, 고등급 본문 직접 SELECT 차단, 검색 벡터 차단, `record_views` 직접 조작 차단, RPC 본문 검열과 실제 열람 기록, 이메일 인증 사용자 작성, 3번째 신고의 검토 회의 생성, 백만 번째 기록 코드와 천 번째 KEEPER 코드 경계. GitHub Actions는 PostgreSQL 15와 17에서 같은 검사를 실행합니다.

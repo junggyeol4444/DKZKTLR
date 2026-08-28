@@ -30,3 +30,22 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - run: chmod +x test/run.sh && test/run.sh
       - run: node tests/verify.mjs && node --check app.js && node --check api.js && node --check i18n.js
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: npm }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Upload browser failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure-artifacts
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14

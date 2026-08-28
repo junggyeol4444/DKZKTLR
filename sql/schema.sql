@@ -103,6 +103,8 @@ create trigger auth_user_profile after insert on auth.users for each row execute
 create or replace function public.prepare_record() returns trigger language plpgsql security definer set search_path='' as $$
 declare seq_no bigint; user_level int; last_post timestamptz; today_posts int;
 begin
+ if auth.uid() is not null and new.is_seed then raise exception 'seed records are server managed'; end if;
+ if auth.uid() is null then return new; end if;
  perform pg_advisory_xact_lock(hashtextextended(auth.uid()::text,0));
  if new.author_id <> auth.uid() then raise exception 'author mismatch'; end if;
  select level into user_level from public.profiles where id=auth.uid();
@@ -116,7 +118,7 @@ begin
  new.record_code='ARC-'||upper(new.domain_id)||'-'||lpad(seq_no::text,greatest(6,length(seq_no::text)),'0'); new.created_at=now();
  return new;
 end $$;
-create trigger prepare_record_before_insert before insert on public.records for each row when(new.is_seed=false) execute procedure public.prepare_record();
+create trigger prepare_record_before_insert before insert on public.records for each row execute procedure public.prepare_record();
 
 create or replace function public.is_admin() returns boolean language sql stable security definer set search_path='' as $$select coalesce((select is_admin from public.profiles where id=auth.uid()),false)$$;
 create or replace function public.is_email_confirmed() returns boolean language sql stable security definer set search_path='' as $$select exists(select 1 from auth.users where id=auth.uid() and email_confirmed_at is not null)$$;
@@ -125,7 +127,7 @@ create or replace function public.touch_record() returns trigger language plpgsq
 declare user_level int;
 begin
  if not public.is_admin() then
-  if new.author_id<>old.author_id or new.record_code<>old.record_code then raise exception 'immutable record identity'; end if;
+  if new.author_id<>old.author_id or new.record_code<>old.record_code or new.created_at<>old.created_at or new.search_document<>old.search_document then raise exception 'immutable record identity'; end if;
   if new.status<>old.status and pg_trigger_depth()=1 then raise exception 'moderation fields are server managed'; end if;
   if new.is_seed<>old.is_seed then raise exception 'seed flag is immutable'; end if;
   if old.deleted_at is not null then raise exception 'deleted records cannot be changed by clients'; end if;
@@ -149,6 +151,7 @@ create trigger level_after_view after insert on public.record_views for each row
 create or replace function public.open_moderation_case() returns trigger language plpgsql security definer set search_path='' as $$
 declare n int;
 begin
+ perform pg_advisory_xact_lock(new.record_id);
  select count(*) into n from public.reports where record_id=new.record_id;
  if exists(select 1 from public.moderation_cases where record_id=new.record_id and status='open') then
   update public.moderation_cases set report_count=n where record_id=new.record_id and status='open';
@@ -185,7 +188,7 @@ begin
  select r.id into target_id from public.records r where r.record_code=requested_code and r.status in('published','under_review') and r.deleted_at is null;
  if target_id is null then return;end if;
  insert into public.record_views(user_id,record_id,viewed_at) values(auth.uid(),target_id,now()) on conflict(user_id,record_id) do update set viewed_at=excluded.viewed_at;
- return query select r.id,r.record_code,r.domain_id,r.category_id,r.title,r.summary,case when r.level<=p.level then r.content else null end,r.event_date,r.tags,r.source,r.level,r.author_id,r.created_at,a.keeper_code,d.name,c.name,r.level<=p.level
+ return query select r.id,r.record_code,r.domain_id,r.category_id,r.title,case when r.level<=p.level then r.summary else null end,case when r.level<=p.level then r.content else null end,r.event_date,r.tags,r.source,r.level,r.author_id,r.created_at,a.keeper_code,d.name,c.name,r.level<=p.level
  from public.records r join public.profiles a on a.id=r.author_id join public.domains d on d.id=r.domain_id join public.categories c on c.id=r.category_id join public.profiles p on p.id=auth.uid() where r.id=target_id;
 end;
 $$;
@@ -220,20 +223,33 @@ revoke all on function public.get_related_records(bigint) from public;
 grant execute on function public.get_related_records(bigint) to authenticated;
 
 create view public.record_catalog with (security_invoker=true) as
-select r.id,r.record_code,r.domain_id,r.category_id,r.title,r.summary,r.event_date,r.tags,r.level,r.author_id,r.status,r.deleted_at,r.created_at,p.keeper_code,d.name domain_name,c.name category_name,
+select r.id,r.record_code,r.domain_id,r.category_id,r.title,case when r.level<=coalesce((select level from public.profiles where id=auth.uid()),0) then r.summary else null end summary,r.event_date,r.tags,r.level,r.author_id,r.status,r.deleted_at,r.created_at,p.keeper_code,d.name domain_name,c.name category_name,
 false as content_available
 from public.records r join public.profiles p on p.id=r.author_id join public.domains d on d.id=r.domain_id join public.categories c on c.id=r.category_id;
 
 create or replace function public.search_record_catalog(search_query text,page_no int default 0)
 returns table(id bigint,record_code text,domain_id text,category_id text,title jsonb,summary jsonb,event_date date,tags text[],level int,author_id uuid,status public.record_status,created_at timestamptz,keeper_code text,domain_name jsonb,category_name jsonb,content_available boolean)
 language sql stable security definer set search_path='' as $$
- select r.id,r.record_code,r.domain_id,r.category_id,r.title,case when r.level<=reader.level then r.summary else null end,r.event_date,r.tags,r.level,r.author_id,r.status,r.created_at,p.keeper_code,d.name,c.name,r.level<=reader.level
+ select r.id,r.record_code,r.domain_id,r.category_id,r.title,case when r.level<=reader.level then r.summary else null end summary,r.event_date,r.tags,r.level,r.author_id,r.status,r.created_at,p.keeper_code,d.name,c.name,r.level<=reader.level
  from public.records r join public.profiles p on p.id=r.author_id join public.profiles reader on reader.id=auth.uid() join public.domains d on d.id=r.domain_id join public.categories c on c.id=r.category_id
  where r.status in('published','under_review') and r.deleted_at is null and r.search_document@@websearch_to_tsquery('simple'::regconfig,search_query)
  order by ts_rank(r.search_document,websearch_to_tsquery('simple'::regconfig,search_query)) desc,r.created_at desc offset greatest(page_no,0)*20 limit 20;
 $$;
 revoke all on function public.search_record_catalog(text,int) from public;
 grant execute on function public.search_record_catalog(text,int) to authenticated;
+
+create or replace function public.get_moderation_dossiers()
+returns setof jsonb language plpgsql stable security definer set search_path='' as $$
+begin
+ if not public.is_admin() then raise exception 'administrator access required' using errcode='42501'; end if;
+ return query select jsonb_build_object('id',mc.id,'record_id',mc.record_id,'report_count',mc.report_count,'status',mc.status,'decision',mc.decision,'opened_at',mc.opened_at,'resolved_at',mc.resolved_at,
+ 'records',jsonb_build_object('record_code',r.record_code,'title',r.title,'summary',r.summary,'content',r.content,'source',r.source,'author_id',r.author_id,'status',r.status),
+ 'reports',coalesce((select jsonb_agg(jsonb_build_object('reason',rp.reason,'detail',rp.detail,'created_at',rp.created_at) order by rp.created_at) from public.reports rp where rp.record_id=mc.record_id),'[]'::jsonb),
+ 'moderation_votes',coalesce((select jsonb_agg(jsonb_build_object('admin_id',v.admin_id,'decision',v.decision,'note',v.note,'created_at',v.created_at,'profiles',jsonb_build_object('keeper_code',p.keeper_code,'display_name',p.display_name)) order by v.created_at) from public.moderation_votes v join public.profiles p on p.id=v.admin_id where v.case_id=mc.id),'[]'::jsonb))
+ from public.moderation_cases mc join public.records r on r.id=mc.record_id order by mc.opened_at desc;
+end $$;
+revoke all on function public.get_moderation_dossiers() from public;
+grant execute on function public.get_moderation_dossiers() to authenticated;
 
 create view public.archive_statistics with (security_invoker=true) as
 select count(*) filter(where status in ('published','under_review') and deleted_at is null)::int record_count,count(*) filter(where status in ('published','under_review') and deleted_at is null and created_at>=date_trunc('day',now()))::int today_count,(select count(*)::int from public.profiles) keeper_count from public.records;
