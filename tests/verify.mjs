@@ -15,6 +15,7 @@ assert.match(schema, /if total>=3/);
 assert.match(schema, /hide_votes\*2>total/);
 assert.doesNotMatch(schema, /set status='hidden' where id=new\.record_id/);
 assert.match(schema, /create or replace function public\.get_related_records/);
+assert.match(schema, /current_record as\(select \* from public\.records where id=requested_id and \(\(status in/, 'related RPC must reject inaccessible source records');
 assert.match(schema, /search_document tsvector not null/);
 assert.match(schema, /create trigger refresh_record_search_before_write/);
 assert.doesNotMatch(schema, /search_document[^\n]*generated always/);

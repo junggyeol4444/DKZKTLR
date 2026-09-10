@@ -18,6 +18,10 @@ do $$begin
 end$$;
 reset role;
 
+set session_replication_role=replica;
+update public.records set status='hidden' where record_code='ARC-SCIENCE-000030';
+set session_replication_role=origin;
+
 set role authenticated;
 select set_config('request.jwt.claim.sub','10000000-0000-4000-a000-000000000001',false);
 
@@ -32,6 +36,7 @@ do $$begin
  exception when insufficient_privilege then null;end;
  begin insert into public.record_views(user_id,record_id) select auth.uid(),id from public.records limit 1;raise exception 'record_views INSERT unexpectedly succeeded';
  exception when insufficient_privilege then null;end;
+ if (select count(*) from public.get_related_records(30))<>0 then raise exception 'hidden record relation side channel exposed candidates';end if;
 end$$;
 
 do $$declare body jsonb;available boolean;begin

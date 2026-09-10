@@ -3,7 +3,7 @@
 create or replace function public.get_related_records(requested_id bigint)
 returns table(id bigint,record_code text,title jsonb,summary jsonb,event_date date,tags text[],level int,keeper_code text,domain_name jsonb,category_name jsonb,score int)
 language sql stable security definer set search_path='' as $$
- with current_record as(select * from public.records where id=requested_id), candidates as(
+ with current_record as(select * from public.records where id=requested_id and ((status in('published','under_review') and deleted_at is null) or author_id=auth.uid() or public.is_admin())), candidates as(
   select r.*,p.keeper_code,d.name domain_name,c.name category_name,
    case when r.id=any(cr.related_ids) then 100 else 0 end+
    (select count(*)::int*3 from unnest(r.tags) tag where tag=any(cr.tags))+
