@@ -232,8 +232,8 @@ returns table(id bigint,record_code text,domain_id text,category_id text,title j
 language sql stable security definer set search_path='' as $$
  select r.id,r.record_code,r.domain_id,r.category_id,r.title,case when r.level<=reader.level then r.summary else null end summary,r.event_date,r.tags,r.level,r.author_id,r.status,r.created_at,p.keeper_code,d.name,c.name,r.level<=reader.level
  from public.records r join public.profiles p on p.id=r.author_id join public.profiles reader on reader.id=auth.uid() join public.domains d on d.id=r.domain_id join public.categories c on c.id=r.category_id
- where r.status in('published','under_review') and r.deleted_at is null and r.search_document@@websearch_to_tsquery('simple'::regconfig,search_query)
- order by ts_rank(r.search_document,websearch_to_tsquery('simple'::regconfig,search_query)) desc,r.created_at desc offset greatest(page_no,0)*20 limit 20;
+ where r.status in('published','under_review') and r.deleted_at is null and (case when r.level<=reader.level then r.search_document else to_tsvector('simple'::regconfig,coalesce(r.title->>'ko','')||' '||coalesce(r.title->>'en','')||' '||coalesce(r.title->>'ja','')||' '||array_to_string(r.tags,' ')) end)@@websearch_to_tsquery('simple'::regconfig,search_query)
+ order by ts_rank((case when r.level<=reader.level then r.search_document else to_tsvector('simple'::regconfig,coalesce(r.title->>'ko','')||' '||coalesce(r.title->>'en','')||' '||coalesce(r.title->>'ja','')||' '||array_to_string(r.tags,' ')) end),websearch_to_tsquery('simple'::regconfig,search_query)) desc,r.created_at desc offset greatest(page_no,0)*20 limit 20;
 $$;
 revoke all on function public.search_record_catalog(text,int) from public;
 grant execute on function public.search_record_catalog(text,int) to authenticated;

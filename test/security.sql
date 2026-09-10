@@ -43,6 +43,7 @@ do $$declare body jsonb;available boolean;begin
  select content,content_available into body,available from public.get_record_for_reader('ARC-SCIENCE-000008');
  if body is not null or available then raise exception 'LEVEL-4 body leaked through reader RPC';end if;
  if(select count(*) from public.record_views where user_id=auth.uid())<>1 then raise exception 'reader RPC did not log exactly one real view';end if;
+ if(select count(*) from public.search_record_catalog('문명을',0))<>0 then raise exception 'restricted content was exposed through the search oracle';end if;
 end$$;
 
 insert into public.bookmarks(user_id,record_id) select auth.uid(),id from public.records where record_code='ARC-SCIENCE-000008';

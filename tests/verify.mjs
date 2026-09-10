@@ -17,6 +17,7 @@ assert.doesNotMatch(schema, /set status='hidden' where id=new\.record_id/);
 assert.match(schema, /create or replace function public\.get_related_records/);
 assert.match(schema, /current_record as\(select \* from public\.records where id=requested_id and \(\(status in/, 'related RPC must reject inaccessible source records');
 assert.match(schema, /search_document tsvector not null/);
+assert.match(schema, /case when r\.level<=reader\.level then r\.search_document else to_tsvector/, 'search must not reveal restricted summary/content terms');
 assert.match(schema, /create trigger refresh_record_search_before_write/);
 assert.doesNotMatch(schema, /search_document[^\n]*generated always/);
 assert.match(rls, /r\.author_id<>auth\.uid\(\)/, 'self-reporting and self-voting must be blocked');
