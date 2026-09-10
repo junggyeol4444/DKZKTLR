@@ -10,7 +10,7 @@ alter table public.records enable trigger touch_record_before_update;
 create index if not exists records_search_idx on public.records using gin(search_document);
 drop view if exists public.record_catalog;
 create view public.record_catalog with(security_invoker=true) as
-select r.id,r.record_code,r.domain_id,r.category_id,r.title,r.summary,r.event_date,r.tags,r.level,r.author_id,r.status,r.deleted_at,r.created_at,p.keeper_code,d.name domain_name,c.name category_name,false content_available
+select r.id,r.record_code,r.domain_id,r.category_id,r.title,case when r.level<=coalesce((select level from public.profiles where id=auth.uid()),0) then r.summary else null end summary,r.event_date,r.tags,r.level,r.author_id,r.status,r.deleted_at,r.created_at,p.keeper_code,d.name domain_name,c.name category_name,false content_available
 from public.records r join public.profiles p on p.id=r.author_id join public.domains d on d.id=r.domain_id join public.categories c on c.id=r.category_id;
 grant select on public.record_catalog to authenticated;
 
@@ -78,7 +78,7 @@ language sql stable security definer set search_path='' as $$select r.id,r.recor
 revoke all on function public.get_own_record(text) from public;grant execute on function public.get_own_record(text) to authenticated;
 create or replace function public.search_record_catalog(search_query text,page_no int default 0)
 returns table(id bigint,record_code text,domain_id text,category_id text,title jsonb,summary jsonb,event_date date,tags text[],level int,author_id uuid,status public.record_status,created_at timestamptz,keeper_code text,domain_name jsonb,category_name jsonb,content_available boolean)
-language sql stable security definer set search_path='' as $$select r.id,r.record_code,r.domain_id,r.category_id,r.title,case when r.level<=reader.level then r.summary else null end,r.event_date,r.tags,r.level,r.author_id,r.status,r.created_at,p.keeper_code,d.name,c.name,r.level<=reader.level from public.records r join public.profiles p on p.id=r.author_id join public.profiles reader on reader.id=auth.uid() join public.domains d on d.id=r.domain_id join public.categories c on c.id=r.category_id where r.status::text in('published','under_review') and r.deleted_at is null and r.search_document@@websearch_to_tsquery('simple'::regconfig,search_query) order by ts_rank(r.search_document,websearch_to_tsquery('simple'::regconfig,search_query)) desc,r.created_at desc offset greatest(page_no,0)*20 limit 20$$;
+language sql stable security definer set search_path='' as $$select r.id,r.record_code,r.domain_id,r.category_id,r.title,case when r.level<=reader.level then r.summary else null end summary,r.event_date,r.tags,r.level,r.author_id,r.status,r.created_at,p.keeper_code,d.name,c.name,r.level<=reader.level from public.records r join public.profiles p on p.id=r.author_id join public.profiles reader on reader.id=auth.uid() join public.domains d on d.id=r.domain_id join public.categories c on c.id=r.category_id where r.status::text in('published','under_review') and r.deleted_at is null and r.search_document@@websearch_to_tsquery('simple'::regconfig,search_query) order by ts_rank(r.search_document,websearch_to_tsquery('simple'::regconfig,search_query)) desc,r.created_at desc offset greatest(page_no,0)*20 limit 20$$;
 revoke all on function public.search_record_catalog(text,int) from public;grant execute on function public.search_record_catalog(text,int) to authenticated;
 
 revoke select on public.records from authenticated;

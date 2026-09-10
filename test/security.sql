@@ -24,6 +24,10 @@ select set_config('request.jwt.claim.sub','10000000-0000-4000-a000-000000000001'
 do $$begin
  begin perform content from public.records limit 1;raise exception 'content SELECT unexpectedly succeeded';
  exception when insufficient_privilege then null;end;
+ begin perform summary from public.records limit 1;raise exception 'summary SELECT unexpectedly succeeded';
+ exception when insufficient_privilege then null;end;
+ begin perform * from public.record_catalog limit 1;raise exception 'legacy catalog SELECT unexpectedly succeeded';
+ exception when insufficient_privilege then null;end;
  begin perform search_document from public.records limit 1;raise exception 'search_document SELECT unexpectedly succeeded';
  exception when insufficient_privilege then null;end;
  begin insert into public.record_views(user_id,record_id) select auth.uid(),id from public.records limit 1;raise exception 'record_views INSERT unexpectedly succeeded';
@@ -36,13 +40,27 @@ do $$declare body jsonb;available boolean;begin
  if(select count(*) from public.record_views where user_id=auth.uid())<>1 then raise exception 'reader RPC did not log exactly one real view';end if;
 end$$;
 
+insert into public.bookmarks(user_id,record_id) select auth.uid(),id from public.records where record_code='ARC-SCIENCE-000008';
+do $$declare leaked jsonb;available boolean;begin
+ select summary,content_available into leaked,available from public.list_record_catalog('SCIENCE',null,null,'created','ko',0) where record_code='ARC-SCIENCE-000008';
+ if leaked is not null or available then raise exception 'catalog RPC leaked restricted summary';end if;
+ select summary,content_available into leaked,available from public.get_bookmarked_records() where record_code='ARC-SCIENCE-000008';
+ if leaked is not null or available then raise exception 'bookmark RPC leaked restricted summary';end if;
+end$$;
+
 reset role;
 select setval(pg_get_serial_sequence('public.records','id'),999999,true);
 set role authenticated;
 select set_config('request.jwt.claim.sub','10000000-0000-4000-a000-000000000001',false);
 insert into public.records(domain_id,category_id,title,summary,content,event_date,tags,source,level,author_id)
 values('HISTORY','MODERN','{"ko":"코드 경계 시험"}','{"ko":"설치 검증용 기록"}','{"ko":"본문"}',current_date,array['검증'],'https://example.com/source',1,auth.uid());
+update public.records set related_ids=array[(select id from public.records where record_code='ARC-SCIENCE-000008')] where record_code='ARC-HISTORY-1000000';
 do $$begin if not exists(select 1 from public.records where author_id=auth.uid() and record_code='ARC-HISTORY-1000000') then raise exception 'record code truncated at one million';end if;end$$;
+do $$declare leaked jsonb;begin
+ select summary into leaked from public.get_related_records((select id from public.records where record_code='ARC-HISTORY-1000000')) where record_code='ARC-SCIENCE-000008';
+ if leaked is not null then raise exception 'related RPC leaked restricted summary';end if;
+ if (select summary->>'ko' from public.get_my_records() where record_code='ARC-HISTORY-1000000')<>'설치 검증용 기록' then raise exception 'own records RPC omitted owner summary';end if;
+end$$;
 reset role;
 
 set role authenticated;select set_config('request.jwt.claim.sub','10000000-0000-4000-a000-000000000002',false);
@@ -57,7 +75,7 @@ reset role;
 
 do $$begin
  if(select status::text from public.records where record_code='ARC-HISTORY-000002')<>'under_review' then raise exception 'third report did not open review';end if;
- if(select count(*) from public.moderation_cases where status='open')<>1 then raise exception 'moderation case missing';end if;
+ if(select count(*) from public.moderation_cases mc join public.records r on r.id=mc.record_id where mc.status='open' and r.record_code='ARC-HISTORY-000002')<>1 then raise exception 'moderation case missing';end if;
 end$$;
 
 select setval('public.keeper_code_seq',999,true);
@@ -66,3 +84,29 @@ values('00000000-0000-0000-0000-000000000000','10000000-0000-4000-a000-000000000
 do $$begin if not exists(select 1 from public.profiles where id='10000000-0000-4000-a000-000000000005' and keeper_code='KEEPER-1000') then raise exception 'keeper code truncated at 1000';end if;end$$;
 
 select 'database integration checks passed' result;
+
+-- Column grants and triggers must reject forged/server-managed fields.
+set role authenticated;
+select set_config('request.jwt.claim.sub','10000000-0000-4000-a000-000000000001',false);
+do $$declare target bigint; locked_summary jsonb;begin
+ select id into target from public.records where record_code='ARC-HISTORY-1000000';
+ begin update public.records set author_id='10000000-0000-4000-a000-000000000002' where id=target;raise exception 'author update unexpectedly succeeded'; exception when insufficient_privilege then null;end;
+ begin update public.records set record_code='FORGED' where id=target;raise exception 'record code update unexpectedly succeeded'; exception when insufficient_privilege then null;end;
+ begin update public.records set status='hidden' where id=target;raise exception 'status update unexpectedly succeeded'; exception when insufficient_privilege then null;end;
+ begin update public.records set is_seed=true where id=target;raise exception 'seed update unexpectedly succeeded'; exception when insufficient_privilege then null;end;
+ begin update public.records set created_at=now()-interval '1 year' where id=target;raise exception 'created_at update unexpectedly succeeded'; exception when insufficient_privilege then null;end;
+ begin update public.records set search_document='forged'::tsvector where id=target;raise exception 'search update unexpectedly succeeded'; exception when insufficient_privilege then null;end;
+ begin insert into public.records(domain_id,category_id,title,summary,content,tags,source,level,author_id,is_seed) values('HISTORY','MODERN','{"ko":"위조"}','{"ko":"위조"}','{"ko":"위조"}',array['위조'],'https://example.com',1,auth.uid(),true);raise exception 'seed insert unexpectedly succeeded'; exception when insufficient_privilege then null;end;
+ select summary into locked_summary from public.get_record_for_reader('ARC-SCIENCE-000008');
+ if locked_summary is not null then raise exception 'LEVEL-4 summary leaked through reader RPC';end if;
+ begin perform public.get_moderation_dossiers();raise exception 'non-admin moderation RPC unexpectedly succeeded'; exception when insufficient_privilege then null;end;
+end$$;
+reset role;
+update public.profiles set is_admin=true where id='10000000-0000-4000-a000-000000000005';
+set role authenticated;
+select set_config('request.jwt.claim.sub','10000000-0000-4000-a000-000000000005',false);
+do $$declare dossier jsonb;begin
+ select x into dossier from public.get_moderation_dossiers() x where (x->>'record_id')::bigint=(select id from public.records where record_code='ARC-HISTORY-000002');
+ if dossier is null or dossier->'records'->'content' is null or jsonb_array_length(dossier->'reports')<>3 then raise exception 'admin dossier omitted original content or reports';end if;
+end$$;
+reset role;

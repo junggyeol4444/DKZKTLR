@@ -24,6 +24,16 @@ assert.doesNotMatch(api, /record_catalog'\)\.select\('\*'\)/, 'search lexemes mu
 assert.doesNotMatch(api, /record_views'\)\.(?:insert|upsert)/, 'view counts must only be written by the reader RPC');
 assert.doesNotMatch(api, /content_available:x\.records\.level<=2/, 'bookmark clearance must not be hard-coded');
 assert.doesNotMatch(rls, /grant select on public\.records to authenticated/, 'records content must not receive table-wide SELECT');
+assert.doesNotMatch(rls, /grant select\([^\n]*summary[^\n]*\) on public\.records/, 'summary must not be directly selectable');
+assert.doesNotMatch(api, /from\('records'\)\.select\([^\n]*summary/, 'summary reads must use clearance-aware RPCs');
+assert.doesNotMatch(api, /from\('bookmarks'\)\.select\([^\n]*records!/, 'bookmark records must use a clearance-aware RPC');
+for (const rpc of ['list_record_catalog','get_bookmarked_records','get_my_records','get_recent_records']) assert.match(schema,new RegExp(`function public\\.${rpc}`));
+assert.doesNotMatch(rls, /grant insert,update on public\.records/, 'record writes must use column grants');
+assert.match(schema, /pg_advisory_xact_lock\(new\.record_id\)/);
+assert.match(schema, /get_moderation_dossiers/);
+assert.match(api, /rpc\('get_moderation_dossiers'\)/);
+assert.match(app, /PASSWORD_RECOVERY/);
+assert.doesNotMatch(app, /const payload=\{author_id:/, 'edit payload must not include author_id');
 assert.match(schema, /greatest\(6,length\(seq_no::text\)\)/);
 assert.match(schema, /greatest\(3,length\(keeper_no::text\)\)/);
 assert.match(app, /#\/edit\//);
