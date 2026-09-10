@@ -56,7 +56,7 @@ LocalStorage는 `akashic_lang`, `akashic_sort`, `akashic_motion`만 사용합니
 
 기존 설치에는 이어서 `sql/migrations/003_security_hardening.sql`을 적용해 컬럼 단위 쓰기 권한, 동시 신고 잠금, 등급별 응답 검열 및 관리자 전용 검토 RPC를 활성화합니다.
 
-PR #11 이전 스키마에서 업그레이드하는 경우 마지막으로 `sql/migrations/004_clearance_read_boundaries.sql`을 적용합니다. 이 마이그레이션은 `summary` 직접 조회 권한을 제거하고 목록·북마크·관련 기록·최근 조회를 등급 검사를 수행하는 전용 RPC로 전환합니다.
+PR #11이 적용된 기존 스키마에서 업그레이드하는 경우 마지막으로 `sql/migrations/004_clearance_read_boundaries.sql`을 적용합니다. 이 마이그레이션은 `summary` 직접 조회 권한을 제거하고 목록·북마크·관련 기록·최근 조회를 등급 검사를 수행하는 전용 RPC로 전환합니다.
 
 ```js
 window.AKASHIC_CONFIG = {

@@ -19,7 +19,7 @@ assert.match(schema, /search_document tsvector not null/);
 assert.match(schema, /create trigger refresh_record_search_before_write/);
 assert.doesNotMatch(schema, /search_document[^\n]*generated always/);
 assert.match(rls, /r\.author_id<>auth\.uid\(\)/, 'self-reporting and self-voting must be blocked');
-assert.match(api, /\['published', 'under_review'\]/, 'reviewed records must stay visible');
+assert.match(schema, /r\.status in\('published','under_review'\)/, 'reviewed records must stay visible through reader RPCs');
 assert.doesNotMatch(api, /record_catalog'\)\.select\('\*'\)/, 'search lexemes must not be returned to readers');
 assert.doesNotMatch(api, /record_views'\)\.(?:insert|upsert)/, 'view counts must only be written by the reader RPC');
 assert.doesNotMatch(api, /content_available:x\.records\.level<=2/, 'bookmark clearance must not be hard-coded');
