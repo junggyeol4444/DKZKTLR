@@ -36,9 +36,9 @@ create policy "admins read votes" on public.moderation_votes for select to authe
 create policy "admins vote once" on public.moderation_votes for insert to authenticated with check(public.is_admin() and admin_id=auth.uid() and exists(select 1 from public.moderation_cases c join public.records r on r.id=c.record_id where c.id=case_id and c.status='open' and r.author_id<>auth.uid()));
 
 revoke all on public.profiles,public.domains,public.categories,public.records,public.bookmarks,public.record_views,public.reports,public.moderation_cases,public.moderation_votes from anon;
-grant select on public.domains,public.categories,public.record_catalog,public.archive_statistics to authenticated;
+grant select on public.domains,public.categories,public.archive_statistics to authenticated;
 grant select(id,keeper_code,display_name,level,lang,is_admin) on public.profiles to authenticated;
-grant select(id,record_code,domain_id,category_id,title,summary,event_date,tags,source,level,author_id,is_seed,status,deleted_at,created_at,updated_at) on public.records to authenticated;
+grant select(id,record_code,domain_id,category_id,title,event_date,tags,source,level,author_id,is_seed,status,deleted_at,created_at,updated_at) on public.records to authenticated;
 revoke insert,update on public.records from authenticated;
 grant insert(domain_id,category_id,title,summary,content,event_date,tags,source,level,related_ids,author_id) on public.records to authenticated;
 grant update(domain_id,category_id,title,summary,content,event_date,tags,source,level,related_ids,deleted_at) on public.records to authenticated;
@@ -48,3 +48,5 @@ grant insert on public.reports to authenticated;
 grant select on public.moderation_cases,public.moderation_votes to authenticated;
 grant insert on public.moderation_votes to authenticated;
 grant usage,select on all sequences in schema public to authenticated;
+
+revoke all on public.record_catalog from authenticated;

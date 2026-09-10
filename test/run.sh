@@ -23,6 +23,7 @@ psql -v ON_ERROR_STOP=1 -d akashic_test -f "$ROOT/sql/seed.sql" >/dev/null
 # this executes the exact migration that previously failed on array_to_string.
 psql -v ON_ERROR_STOP=1 -d akashic_test -f "$ROOT/sql/migrations/002_records_completion.sql" >/dev/null
 psql -v ON_ERROR_STOP=1 -d akashic_test -f "$ROOT/sql/migrations/003_security_hardening.sql" >/dev/null
+psql -v ON_ERROR_STOP=1 -d akashic_test -f "$ROOT/sql/migrations/004_clearance_read_boundaries.sql" >/dev/null
 psql -v ON_ERROR_STOP=1 -d akashic_test -f "$ROOT/test/parallel_setup.sql" >/dev/null
 pids=()
 for reporter in 20000000-0000-4000-a000-000000000001 20000000-0000-4000-a000-000000000002 20000000-0000-4000-a000-000000000003; do

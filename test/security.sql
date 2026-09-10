@@ -18,22 +18,40 @@ do $$begin
 end$$;
 reset role;
 
+set session_replication_role=replica;
+update public.records set status='hidden' where record_code='ARC-SCIENCE-000030';
+set session_replication_role=origin;
+
 set role authenticated;
 select set_config('request.jwt.claim.sub','10000000-0000-4000-a000-000000000001',false);
 
 do $$begin
  begin perform content from public.records limit 1;raise exception 'content SELECT unexpectedly succeeded';
  exception when insufficient_privilege then null;end;
+ begin perform summary from public.records limit 1;raise exception 'summary SELECT unexpectedly succeeded';
+ exception when insufficient_privilege then null;end;
+ begin perform * from public.record_catalog limit 1;raise exception 'legacy catalog SELECT unexpectedly succeeded';
+ exception when insufficient_privilege then null;end;
  begin perform search_document from public.records limit 1;raise exception 'search_document SELECT unexpectedly succeeded';
  exception when insufficient_privilege then null;end;
  begin insert into public.record_views(user_id,record_id) select auth.uid(),id from public.records limit 1;raise exception 'record_views INSERT unexpectedly succeeded';
  exception when insufficient_privilege then null;end;
+ if (select count(*) from public.get_related_records(30))<>0 then raise exception 'hidden record relation side channel exposed candidates';end if;
 end$$;
 
 do $$declare body jsonb;available boolean;begin
  select content,content_available into body,available from public.get_record_for_reader('ARC-SCIENCE-000008');
  if body is not null or available then raise exception 'LEVEL-4 body leaked through reader RPC';end if;
  if(select count(*) from public.record_views where user_id=auth.uid())<>1 then raise exception 'reader RPC did not log exactly one real view';end if;
+ if(select count(*) from public.search_record_catalog('문명을',0))<>0 then raise exception 'restricted content was exposed through the search oracle';end if;
+end$$;
+
+insert into public.bookmarks(user_id,record_id) select auth.uid(),id from public.records where record_code='ARC-SCIENCE-000008';
+do $$declare leaked jsonb;available boolean;begin
+ select summary,content_available into leaked,available from public.list_record_catalog('SCIENCE',null,null,'created','ko',0) where record_code='ARC-SCIENCE-000008';
+ if leaked is not null or available then raise exception 'catalog RPC leaked restricted summary';end if;
+ select summary,content_available into leaked,available from public.get_bookmarked_records() where record_code='ARC-SCIENCE-000008';
+ if leaked is not null or available then raise exception 'bookmark RPC leaked restricted summary';end if;
 end$$;
 
 reset role;
@@ -42,7 +60,13 @@ set role authenticated;
 select set_config('request.jwt.claim.sub','10000000-0000-4000-a000-000000000001',false);
 insert into public.records(domain_id,category_id,title,summary,content,event_date,tags,source,level,author_id)
 values('HISTORY','MODERN','{"ko":"코드 경계 시험"}','{"ko":"설치 검증용 기록"}','{"ko":"본문"}',current_date,array['검증'],'https://example.com/source',1,auth.uid());
+update public.records set related_ids=array[(select id from public.records where record_code='ARC-SCIENCE-000008')] where record_code='ARC-HISTORY-1000000';
 do $$begin if not exists(select 1 from public.records where author_id=auth.uid() and record_code='ARC-HISTORY-1000000') then raise exception 'record code truncated at one million';end if;end$$;
+do $$declare leaked jsonb;begin
+ select summary into leaked from public.get_related_records((select id from public.records where record_code='ARC-HISTORY-1000000')) where record_code='ARC-SCIENCE-000008';
+ if leaked is not null then raise exception 'related RPC leaked restricted summary';end if;
+ if (select summary->>'ko' from public.get_my_records() where record_code='ARC-HISTORY-1000000')<>'설치 검증용 기록' then raise exception 'own records RPC omitted owner summary';end if;
+end$$;
 reset role;
 
 set role authenticated;select set_config('request.jwt.claim.sub','10000000-0000-4000-a000-000000000002',false);

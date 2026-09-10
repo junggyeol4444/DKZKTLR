@@ -56,6 +56,8 @@ LocalStorage는 `akashic_lang`, `akashic_sort`, `akashic_motion`만 사용합니
 
 기존 설치에는 이어서 `sql/migrations/003_security_hardening.sql`을 적용해 컬럼 단위 쓰기 권한, 동시 신고 잠금, 등급별 응답 검열 및 관리자 전용 검토 RPC를 활성화합니다.
 
+PR #11이 적용된 기존 스키마에서 업그레이드하는 경우 마지막으로 `sql/migrations/004_clearance_read_boundaries.sql`을 적용합니다. 이 마이그레이션은 `summary` 직접 조회 권한을 제거하고 목록·북마크·관련 기록·최근 조회를 등급 검사를 수행하는 전용 RPC로 전환합니다.
+
 ```js
 window.AKASHIC_CONFIG = {
   supabaseUrl: 'https://YOUR_PROJECT.supabase.co',
@@ -70,7 +72,7 @@ window.AKASHIC_CONFIG = {
 - 모든 테이블은 RLS가 활성화되고 anon 접근은 거부됩니다.
 - 기록의 작성자와 등급은 DB 트리거와 정책에서 다시 검사합니다.
 - `profiles.level`, `profiles.is_admin`, `keeper_code`에는 클라이언트 UPDATE 권한이 없습니다.
-- `get_record_for_reader()`는 사용자의 DB 등급을 확인하고, 부족하면 `content`를 `NULL`로 반환합니다.
+- 조회 RPC들은 사용자의 DB 등급을 확인하고, 부족하면 `summary`와 `content`를 `NULL`로 반환합니다. 원본 테이블의 `summary`와 `content`에는 authenticated 직접 SELECT 권한이 없습니다.
 - `records.content`와 검색용 `search_document`에는 authenticated SELECT 권한이 없습니다. 검색은 검색 벡터를 응답하지 않는 전용 RPC로만 처리됩니다.
 - `record_views`에는 클라이언트 INSERT/UPDATE 권한이 없습니다. 실제 상세 조회 RPC가 성공한 경우에만 서버가 열람을 기록합니다.
 - 삭제는 `deleted_at`을 사용하는 소프트 삭제이며, FK에는 하드 삭제 시 `ON DELETE CASCADE`가 적용됩니다.
